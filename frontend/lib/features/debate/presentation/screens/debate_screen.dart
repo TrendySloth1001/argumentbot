@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../data/models/debate.dart';
 import '../../data/services/debate_service.dart';
+import '../widgets/power_bar.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -44,11 +46,48 @@ class _DebateScreenState extends State<DebateScreen> {
     });
 
     try {
-      final debate = await _debateService.nextTurn(widget.debateId);
-      setState(() {
-        _debate = debate;
-      });
-      _scrollToBottom();
+      String fullContent = '';
+      String? currentSpeaker;
+
+      // Temporary turn for UI visualization
+      DebateTurn? tempTurn;
+
+      await for (final event in _debateService.streamTurn(widget.debateId)) {
+        if (event.containsKey('done')) {
+          _loadDebate(); // Reload full debate with analysis when done
+          break;
+        }
+
+        if (event.containsKey('content')) {
+          final content = event['content'];
+          final speaker = event['speaker'];
+          fullContent += content;
+
+          setState(() {
+            // Create or update temporary turn
+            if (tempTurn == null) {
+              tempTurn = DebateTurn(
+                id: 'temp',
+                speaker: speaker,
+                content: fullContent,
+                timestamp: DateTime.now(),
+                modelName: 'llama3.2',
+              );
+              _debate!.turns.add(tempTurn!);
+            } else {
+              // Update existing temp turn in list (hacky but works for UI)
+              _debate!.turns.last = DebateTurn(
+                id: 'temp',
+                speaker: speaker,
+                content: fullContent,
+                timestamp: DateTime.now(),
+                modelName: 'llama3.2',
+              );
+            }
+          });
+          _scrollToBottom();
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -65,11 +104,7 @@ class _DebateScreenState extends State<DebateScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOutCubic,
-        );
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
   }
@@ -95,19 +130,45 @@ class _DebateScreenState extends State<DebateScreen> {
       );
     }
 
+    // Calculate Scores based on analysis
+    double scoreA = 50;
+    double scoreB = 50;
+
+    for (var turn in _debate!.turns) {
+      final analysis = turn.analysis;
+      if (analysis != null) {
+        final persuasiveness = (analysis['persuasiveness'] ?? 50) as num;
+        if (turn.speaker == 'MODEL_A') {
+          scoreA += persuasiveness.toDouble();
+        } else {
+          scoreB += persuasiveness.toDouble();
+        }
+      }
+    }
+
     return Scaffold(
-      backgroundColor: Colors.black, // Premium Dark Background
+      backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
-        title: Text(
-          _debate!.topic,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+        title: Column(
+          children: [
+            Text(
+              _debate!.topic,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14, // Smaller title to make room
+              ),
+            ),
+            const SizedBox(height: 5),
+            SizedBox(
+              height: 20,
+              width: 200,
+              child: PowerBar(scoreA: scoreA, scoreB: scoreB),
+            ),
+          ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -148,32 +209,120 @@ class _DebateScreenState extends State<DebateScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                isModelA ? 'PROPONENT (AI)' : 'OPPONENT (AI)',
-                style: TextStyle(
-                  color: isModelA
-                      ? const Color(0xFF8E2DE2)
-                      : const Color(0xFF00B4DB),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1.5,
-                ),
+              Row(
+                children: [
+                  Text(
+                    isModelA ? 'PROPONENT' : 'OPPONENT',
+                    style: TextStyle(
+                      color: isModelA
+                          ? const Color(0xFF8E2DE2)
+                          : const Color(0xFF00B4DB),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      turn.modelName ?? 'Llama 3.2', // Show Model Name
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
-              Text(
-                turn.content,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  height: 1.6,
-                  fontFamily: 'Roboto',
+              MarkdownBody(
+                data: turn.content,
+                styleSheet: MarkdownStyleSheet(
+                  p: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    height: 1.6,
+                    fontFamily: 'Roboto',
+                  ),
+                  h3: const TextStyle(
+                    // Style for ### Counter Question
+                    color: Colors.amberAccent,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    height: 2.0,
+                  ),
+                  listBullet: const TextStyle(color: Colors.white),
                 ),
               ),
+              if (turn.analysis != null) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (turn.analysis!['key_point'] != null)
+                      _buildAnalysisTag(
+                        icon: Icons.lightbulb_outline,
+                        text: turn.analysis!['key_point'] ?? '',
+                        color: Colors.amberAccent,
+                      ),
+                    if ((turn.analysis!['persuasiveness'] ?? 0) > 80)
+                      _buildAnalysisTag(
+                        icon: Icons.local_fire_department,
+                        text: 'Strong Point',
+                        color: Colors.redAccent,
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
         Divider(color: Colors.grey[900], thickness: 1),
       ],
+    );
+  }
+
+  Widget _buildAnalysisTag({
+    required IconData icon,
+    required String text,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Flexible(
+            // Ensure text doesn't overflow
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -5,6 +5,7 @@ import '../../../../features/auth/data/models/user_model.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../debate/presentation/screens/debate_setup_screen.dart';
 import '../../../debate/presentation/screens/debate_history_screen.dart';
+import '../../../settings/presentation/screens/settings_screen.dart';
 import '../widgets/home_tab.dart';
 
 class MainScreen extends StatefulWidget {
@@ -33,12 +34,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
       ProfileScreen(user: widget.user),
-      const Center(
-        child: Text(
-          'Settings Screen',
-          style: TextStyle(color: Colors.white, fontSize: 24),
-        ),
-      ),
+      const SettingsScreen(),
     ];
   }
 

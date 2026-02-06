@@ -26,4 +26,23 @@ export class LlmService {
             throw new InternalServerErrorException('Failed to communicate with AI model');
         }
     }
+    async generateStream(content: string, model: string = 'llama3.2'): Promise<any> {
+        try {
+            const response = await fetch(this.ollamaUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [{ role: 'user', content }],
+                    stream: true,
+                }),
+            });
+
+            if (!response.body) throw new Error('ReadableStream not supported in this environment');
+            return response.body;
+        } catch (error) {
+            console.error('Ollama Stream Error:', error);
+            throw new InternalServerErrorException('Failed to stream from AI model');
+        }
+    }
 }

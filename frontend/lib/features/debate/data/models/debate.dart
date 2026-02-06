@@ -32,6 +32,8 @@ class DebateTurn {
   final String id;
   final String speaker;
   final String content;
+  final Map<String, dynamic>? analysis;
+  final String? modelName;
   final DateTime timestamp;
 
   DebateTurn({
@@ -39,6 +41,8 @@ class DebateTurn {
     required this.speaker,
     required this.content,
     required this.timestamp,
+    this.analysis,
+    this.modelName = 'llama3.2',
   });
 
   factory DebateTurn.fromJson(Map<String, dynamic> json) {
@@ -46,6 +50,10 @@ class DebateTurn {
       id: json['id'],
       speaker: json['speaker'],
       content: json['content'],
+      analysis: json['analysis'] != null
+          ? json['analysis'] as Map<String, dynamic>
+          : null,
+      modelName: json['modelName'],
       timestamp: DateTime.parse(json['timestamp']),
     );
   }

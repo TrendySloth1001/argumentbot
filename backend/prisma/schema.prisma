@@ -39,7 +39,9 @@ model DebateTurn {
   id        String   @id @default(uuid())
   debateId  String
   speaker   Speaker
+  modelName String?   @default("llama3.2")
   content   String
+  analysis  Json?
   timestamp DateTime @default(now())
   debate    Debate   @relation(fields: [debateId], references: [id])
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../../core/data/settings_manager.dart';
 import '../models/debate.dart';
 
 class DebateService {
@@ -32,7 +33,45 @@ class DebateService {
     }
   }
 
+  Stream<Map<String, dynamic>> streamTurn(String debateId) async* {
+    final mode = await SettingsManager.getScoringMode();
+    final token = await _storage.read(key: 'jwt_token');
+
+    final client = http.Client();
+    try {
+      final request = http.Request(
+        'GET',
+        Uri.parse('$baseUrl/debate/$debateId/stream?scoringMode=$mode'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'text/event-stream';
+
+      final response = await client.send(request);
+
+      await for (final chunk in response.stream.transform(utf8.decoder)) {
+        // SSE format is "data: {...}\n\n"
+        // We might get multiple lines or partial lines
+        final lines = chunk.split('\n');
+        for (final line in lines) {
+          if (line.startsWith('data: ')) {
+            final jsonStr = line.substring(6);
+            if (jsonStr.trim().isNotEmpty) {
+              try {
+                yield jsonDecode(jsonStr);
+              } catch (e) {
+                // ignore parse errors
+              }
+            }
+          }
+        }
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   Future<Debate> nextTurn(String debateId) async {
+    final mode = await SettingsManager.getScoringMode();
     final token = await _storage.read(key: 'jwt_token');
     final response = await http.post(
       Uri.parse('$baseUrl/debate/$debateId/next'),
@@ -40,6 +79,7 @@ class DebateService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
+      body: jsonEncode({'scoringMode': mode}),
     );
 
     if (response.statusCode == 201 || response.statusCode == 200) {
