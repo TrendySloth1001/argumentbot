@@ -19,6 +19,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   List<dynamic> _comments = [];
   bool _isLoading = true;
 
+  static const Color neonGreen = Color(0xFF00FF88);
+
   @override
   void initState() {
     super.initState();
@@ -34,9 +36,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load comments: $e')));
         setState(() => _isLoading = false);
       }
     }
@@ -51,14 +50,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       _loadComments();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to post comment: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to post: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
-  // Calculate debate scores from turns
   Map<String, double> _calculateScores() {
     double scoreA = 50;
     double scoreB = 50;
@@ -78,287 +79,292 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     return {'scoreA': scoreA, 'scoreB': scoreB};
   }
 
+  Widget _buildDivider() {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.grey[800]!,
+            Colors.grey[800]!,
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.2, 0.8, 1.0],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scores = _calculateScores();
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: CustomScrollView(
-        slivers: [
-          // Premium AppBar with gradient
-          SliverAppBar(
-            expandedHeight: 180,
-            pinned: true,
-            backgroundColor: Colors.black,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Debate Post',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Topic
+                  Text(
+                    widget.post.debate.topic,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.post.debate.topic,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 16),
+
+                  // Power Bar with labels
+                  Row(
+                    children: [
+                      Text(
+                        'PRO',
+                        style: TextStyle(
+                          color: neonGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 12),
-                        // Power Bar
-                        SizedBox(
-                          height: 24,
-                          child: PowerBar(
-                            scoreA: scores['scoreA']!,
-                            scoreB: scores['scoreB']!,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: PowerBar(
+                          scoreA: scores['scoreA']!,
+                          scoreB: scores['scoreB']!,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'CON',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  _buildDivider(),
+
+                  // Author
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: neonGreen.withAlpha(100),
+                            width: 2,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: ClipOval(
+                          child: widget.post.authorAvatarUrl != null
+                              ? Image.network(
+                                  widget.post.authorAvatarUrl!,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  color: Colors.grey[900],
+                                  child: Center(
+                                    child: Text(
+                                      widget.post.authorName[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'PROPONENT',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
                             Text(
-                              '${widget.post.debate.turns.length} turns',
+                              widget.post.authorName,
                               style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 10,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const Text(
-                              'OPPONENT',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                            if (widget.post.description != null)
+                              Text(
+                                widget.post.description!,
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ),
-          ),
 
-          // Author info
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.grey[800],
-                    backgroundImage: widget.post.authorAvatarUrl != null
-                        ? NetworkImage(widget.post.authorAvatarUrl!)
-                        : null,
-                    child: widget.post.authorAvatarUrl == null
-                        ? Text(
-                            widget.post.authorName[0].toUpperCase(),
-                            style: const TextStyle(color: Colors.white),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.post.authorName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (widget.post.description != null)
-                          Text(
-                            widget.post.description!,
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 13,
-                            ),
-                            maxLines: 2,
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                  _buildDivider(),
 
-          // Transcript Header
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
+                  // Transcript Header
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 12,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.forum, color: Colors.blueAccent, size: 14),
-                        SizedBox(width: 4),
-                        Text(
-                          'TRANSCRIPT',
-                          style: TextStyle(
-                            color: Colors.blueAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Debate Turns
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final turn = widget.post.debate.turns[index];
-              final isModelA = turn.speaker == 'MODEL_A';
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: DebateTurnItem(turn: turn, isModelA: isModelA),
-              );
-            }, childCount: widget.post.debate.turns.length),
-          ),
-
-          // Comments Header
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
+                      color: neonGreen.withAlpha(20),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.chat_bubble_outline,
-                          color: Colors.white70,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
+                        Icon(Icons.forum, color: neonGreen, size: 14),
+                        const SizedBox(width: 6),
                         Text(
-                          'COMMENTS (${_comments.length})',
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          'TRANSCRIPT',
+                          style: TextStyle(
+                            color: neonGreen,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
+                            letterSpacing: 1,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
+
+                  // Debate Turns
+                  ...widget.post.debate.turns.map((turn) {
+                    final isModelA = turn.speaker == 'MODEL_A';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: DebateTurnItem(turn: turn, isModelA: isModelA),
+                    );
+                  }),
+
+                  _buildDivider(),
+
+                  // Comments Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[900],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          color: Colors.grey[500],
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'COMMENTS (${_comments.length})',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Comments List
+                  if (_isLoading)
+                    Center(
+                      child: CircularProgressIndicator(
+                        color: neonGreen,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  else if (_comments.isEmpty)
+                    Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            color: Colors.grey[700],
+                            size: 32,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No comments yet',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ..._comments.map((comment) => _buildCommentTile(comment)),
+
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
           ),
 
-          // Comments List
-          if (_isLoading)
-            const SliverToBoxAdapter(
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_comments.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      color: Colors.grey[700],
-                      size: 40,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No comments yet. Be the first!',
-                      style: TextStyle(color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildCommentTile(_comments[index]),
-                childCount: _comments.length,
-              ),
-            ),
-
-          // Bottom padding
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          // Input Area
+          _buildInputArea(),
         ],
       ),
-      bottomSheet: _buildInputArea(),
     );
   }
 
   Widget _buildCommentTile(dynamic comment) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
-            radius: 16,
+            radius: 14,
             backgroundColor: Colors.grey[800],
             backgroundImage: comment['author']['avatarUrl'] != null
                 ? NetworkImage(comment['author']['avatarUrl'])
                 : null,
             child: comment['author']['avatarUrl'] == null
-                ? const Icon(Icons.person, color: Colors.white, size: 16)
+                ? const Icon(Icons.person, color: Colors.white, size: 14)
                 : null,
           ),
           const SizedBox(width: 10),
@@ -370,14 +376,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   comment['author']['username'] ?? 'User',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   comment['content'],
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
                 ),
               ],
             ),
@@ -391,27 +397,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        border: Border(top: BorderSide(color: Colors.grey[800]!)),
+        color: Colors.black,
+        border: Border(top: BorderSide(color: Colors.grey[900]!)),
       ),
       child: SafeArea(
+        top: false,
         child: Row(
           children: [
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: Colors.grey[850],
+                  color: Colors.grey[900],
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: TextField(
                   controller: _commentController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
                     hintText: 'Share your thoughts...',
-                    hintStyle: TextStyle(color: Colors.grey),
+                    hintStyle: TextStyle(color: Colors.grey[600]),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
               ),
@@ -421,11 +428,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               onTap: _sendComment,
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: Colors.blueAccent,
+                decoration: BoxDecoration(
+                  color: neonGreen,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.send, color: Colors.white, size: 20),
+                child: const Icon(Icons.send, color: Colors.black, size: 18),
               ),
             ),
           ],
