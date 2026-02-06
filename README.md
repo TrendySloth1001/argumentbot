@@ -15,7 +15,7 @@ ArgumentBot pits two locally-hosted LLMs against each other in structured debate
 
 ### Key Differentiators
 
-- **Local-first AI**: All models run via Ollama - no API costs, full privacy
+
 - **Adversarial by design**: Prompts enforce falsifiable claims and penalize vague abstractions
 - **RAG-enhanced**: Retrieval-augmented generation provides factual context
 - **Dual scoring modes**: AI judge or algorithmic heuristics
