@@ -17,8 +17,6 @@ export class DebateService {
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
-    // ... (rest of methods)
-
     async getDebate(id: string) {
         const cacheKey = `debate:${id}`;
         const cached = await this.cacheManager.get(cacheKey);
@@ -29,7 +27,7 @@ export class DebateService {
             include: { turns: { orderBy: { timestamp: 'asc' } } },
         });
 
-        if (debate) await this.cacheManager.set(cacheKey, debate, 600000); // 10 mins
+        if (debate) await this.cacheManager.set(cacheKey, debate, 600000);
         return debate;
     }
 
@@ -49,7 +47,6 @@ export class DebateService {
         return debates;
     }
 
-    // Get debates for a specific user only
     async getDebatesByUser(userId: string) {
         const cacheKey = `debates:user:${userId}`;
         const cached = await this.cacheManager.get(cacheKey);
@@ -80,46 +77,55 @@ export class DebateService {
 
         const lastTurn = debate.turns[debate.turns.length - 1];
         const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
-        const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
-
-        // Dynamic Model Selection
-        // MODEL_A = Proponent (Llama 3.2: Fast, Consistent)
-        // MODEL_B = Opponent (Gemma 2:2b: Creative, Different Tone)
+        const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'PROPONENT (defending the claim)' : 'OPPONENT (attacking the claim)';
         const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
         const context = await this.ragService.searchSimilar(lastTurn.content);
         const contextText = context.map((d) => d.content).join('\n');
 
+        // Build debate history for context
+        const history = debate.turns.map(t =>
+            `${t.speaker === Speaker.MODEL_A ? 'PRO' : 'CON'}: ${t.content}`
+        ).join('\n\n');
+
         const prompt = `
-        You are participating in a debate on the topic: "${debate.topic}".
-        You are ${nextSpeaker} (${roleDescription}). 
-        
-        Your Opponent said: "${lastTurn.content}"
+You are the ${roleDescription} in a COMPETITIVE debate.
+Topic: "${debate.topic}"
 
-        Relevant Context:
-        ${contextText}
+=== DEBATE HISTORY ===
+${history}
 
-        Instructions:
-        1. FIRST, start with a section header: "## Answer".
-        2. Under "## Answer", directly address the opponent's main point or question.
-        3. Then, provide your own concise main argument using clear language.
-        4. END your response with a dedicated section header: "### Counter Question".
-        5. Under that header, ask a provocative simple question to the opponent.
-        6. CRITICAL: Keep your entire response UNDER 100 WORDS.
+=== RELEVANT FACTS ===
+${contextText}
 
-        Format:
-        ## Answer
-        [Direct Answer/Rebuttal]
+=== HARD RULES (VIOLATIONS = LOSS) ===
+1. STATE ONE EXPLICIT CLAIM: You MUST make exactly ONE falsifiable claim. Example: "X causes Y because Z" not "X may relate to Y".
+2. NO VAGUE ABSTRACTIONS: Terms like "mystery", "meaning", "interconnectedness", "purpose" are BANNED unless you define them with a concrete example.
+3. ANSWER DIRECTLY FIRST: If opponent asked a question, answer it in ≤2 sentences BEFORE arguing.
+4. ATTACK WEAKNESS: Identify ONE specific flaw, contradiction, or unsupported assumption in opponent's argument.
+5. NO AGREEMENT: You are adversaries. Finding "common ground" = LOSING.
 
-        [Main Argument]
-        
-        ### Counter Question
-        [Your Question Here]
-        `;
+=== REQUIRED FORMAT ===
+## Direct Answer
+[If opponent asked a question, answer in 1-2 sentences. If not, skip.]
+
+## My Claim
+[State your ONE falsifiable claim in 1 sentence]
+
+## Attack
+[Point out ONE specific weakness in opponent's argument]
+
+## Counter Question
+[Ask ONE pointed question that exposes a flaw in their position]
+
+=== CONSTRAINTS ===
+- UNDER 80 WORDS TOTAL
+- Be aggressive, not diplomatic
+- Use concrete examples, not philosophy
+`;
 
         const stream = await this.llmService.generateStream(prompt, activeModel);
 
-        // We return the stream + metadata needed to save the turn later
         return {
             stream,
             debateId: debate.id,
@@ -127,12 +133,11 @@ export class DebateService {
             topic: debate.topic,
             lastTurnContent: lastTurn.content,
             scoringMode,
-            modelName: activeModel // Pass the chosen model name
+            modelName: activeModel
         };
     }
 
     async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string) {
-        // Create Turn
         const newTurn = await this.prisma.debateTurn.create({
             data: {
                 debateId,
@@ -142,7 +147,6 @@ export class DebateService {
             },
         });
 
-        // Analyze
         let analysis;
         if (scoringMode === 'ALGO') {
             analysis = this.scoringService.calculateScore(content, topic);
@@ -150,7 +154,6 @@ export class DebateService {
             analysis = await this.analyzeTurn(topic, lastTurnContent, content);
         }
 
-        // Update Turn
         await this.prisma.debateTurn.update({
             where: { id: newTurn.id },
             data: { analysis },
@@ -163,7 +166,6 @@ export class DebateService {
     }
 
     async startDebate(topic: string, userId?: string) {
-        // Create the debate
         const debate = await this.prisma.debate.create({
             data: {
                 topic,
@@ -172,19 +174,28 @@ export class DebateService {
             },
         });
 
-        // Initialize with an opening statement from Model A
         const context = await this.ragService.searchSimilar(topic);
         const contextText = context.map(c => c.content).join('\n');
 
         const prompt = `
-        You are participating in a debate on the topic: "${topic}".
-        You are Speaker A (The Proponent). 
-        
-        Relevant Facts:
-        ${contextText}
+You are the PROPONENT in a competitive debate.
+Topic: "${topic}"
 
-        Please provide your opening argument supporting the topic. Keep it concise (under 3 sentences).
-        `;
+Relevant Facts:
+${contextText}
+
+=== OPENING STATEMENT RULES ===
+1. Make ONE bold, falsifiable claim that supports the topic
+2. Provide ONE concrete piece of evidence (statistic, example, or fact)
+3. End with ONE provocative question for your opponent
+4. NO philosophical abstractions - be specific and aggressive
+5. UNDER 60 WORDS
+
+Format:
+**Claim:** [Your falsifiable claim]
+**Evidence:** [One concrete fact/example]
+**Challenge:** [Provocative question for opponent]
+`;
 
         const response = await this.llmService.generateResponse(prompt);
 
@@ -223,35 +234,51 @@ export class DebateService {
 
         const lastTurn = debate.turns[debate.turns.length - 1];
         const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
-        const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
-
-        // Multi-model for non-streaming
+        const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'PROPONENT (defending)' : 'OPPONENT (attacking)';
         const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
-        // 1. Retrieve relevant context (RAG)
         const context = await this.ragService.searchSimilar(lastTurn.content);
         const contextText = context.map((d) => d.content).join('\n');
 
-        // 2. Generate Response
+        const history = debate.turns.map(t =>
+            `${t.speaker === Speaker.MODEL_A ? 'PRO' : 'CON'}: ${t.content}`
+        ).join('\n\n');
+
         const prompt = `
-        You are participating in a debate on the topic: "${debate.topic}".
-        You are ${nextSpeaker} (${roleDescription}). 
-        
-        Your Opponent said: "${lastTurn.content}"
+You are the ${roleDescription} in a COMPETITIVE debate.
+Topic: "${debate.topic}"
 
-        Relevant Context:
-        ${contextText}
+=== DEBATE HISTORY ===
+${history}
 
-        Instructions:
-        - Start with "## Answer" to rebut the opponent.
-        - Use strong, persuasive language for your argument.
-        - END with "### Counter Question" to ask a provocative question.
-        - CRITICAL: Keep response UNDER 100 WORDS.
-        `;
+=== FACTS ===
+${contextText}
+
+=== RULES (VIOLATIONS = LOSS) ===
+1. ONE CLAIM: State exactly ONE falsifiable claim
+2. NO VAGUENESS: "mystery/meaning/purpose" BANNED without concrete definition
+3. ANSWER FIRST: If asked a question, answer in ≤2 sentences
+4. ATTACK: Find ONE flaw in opponent's argument
+5. NO AGREEMENT: You are adversaries
+
+=== FORMAT ===
+## Answer
+[Direct answer if question was asked]
+
+## Claim
+[ONE falsifiable claim]
+
+## Attack
+[ONE weakness in opponent's argument]
+
+## Question
+[ONE pointed question]
+
+UNDER 80 WORDS. Be aggressive.
+`;
 
         const responseContent = await this.llmService.generateResponse(prompt, activeModel);
 
-        // 3. Create Turn WITHOUT analysis first
         const newTurn = await this.prisma.debateTurn.create({
             data: {
                 debateId: debate.id,
@@ -261,16 +288,13 @@ export class DebateService {
             },
         });
 
-        // 4. Analyze Turn (Hybrid)
         let analysis;
         if (scoringMode === 'ALGO') {
             analysis = this.scoringService.calculateScore(responseContent, debate.topic);
         } else {
-            // We analyze the NEW turn in context of the debate
             analysis = await this.analyzeTurn(debate.topic, lastTurn.content, responseContent);
         }
 
-        // 5. Update Turn with Analysis
         await this.prisma.debateTurn.update({
             where: { id: newTurn.id },
             data: { analysis },
@@ -287,34 +311,62 @@ export class DebateService {
 
     private async analyzeTurn(topic: string, opponentArg: string, response: string): Promise<any> {
         const prompt = `
-        Act as an impartial debate judge. Analyze the following exchange:
-        Topic: "${topic}"
-        Opponent Argument: "${opponentArg}"
-        Response: "${response}"
+You are a STRICT debate judge. Analyze this exchange:
 
-        Evaluate the Response based on:
-        1. Persuasiveness (0-100)
-        2. Rebuttal Effectiveness (0-100) - Did they address the point?
-        3. Counter-Question Quality (0-100) - Is it a strong question?
+Topic: "${topic}"
+Opponent said: "${opponentArg}"
+Response: "${response}"
 
-        Output ONLY valid JSON:
-        {
-            "persuasiveness": number,
-            "rebuttal_score": number,
-            "question_score": number,
-            "key_point": "string summary of the main point"
-        }
-        `;
+=== SCORING CRITERIA ===
+
+1. CLAIM QUALITY (0-100):
+   - 100: Clear falsifiable claim with evidence
+   - 50: Vague claim, no evidence
+   - 0: No claim or pure abstraction
+
+2. DIRECT ANSWER (0-100):
+   - 100: Answered opponent's question directly
+   - 50: Partially addressed
+   - 0: Ignored or deflected (MAJOR PENALTY)
+
+3. ATTACK STRENGTH (0-100):
+   - 100: Identified specific flaw with counter-evidence
+   - 50: Generic disagreement
+   - 0: Agreed or didn't challenge
+
+4. VAGUENESS PENALTY (-30 for each):
+   - Used "mystery/meaning/purpose/interconnected" without definition
+   - Made unfalsifiable claims
+   - Asked rhetorical questions instead of pointed ones
+
+=== OUTPUT ===
+Return ONLY valid JSON:
+{
+    "persuasiveness": <number 0-100, average of above minus penalties>,
+    "claim_score": <number 0-100>,
+    "answer_score": <number 0-100>,
+    "attack_score": <number 0-100>,
+    "vagueness_penalty": <number, negative>,
+    "key_point": "<one sentence summary of their main claim>",
+    "weakness": "<one sentence describing the biggest flaw>"
+}
+`;
 
         try {
             const jsonStr = await this.llmService.generateResponse(prompt, 'llama3.2');
-            // Clean up markdown code blocks if present
             const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(cleanJson);
         } catch (e) {
             console.error('Analysis failed', e);
-            return { persuasiveness: 50, rebuttal_score: 50, question_score: 50, key_point: "Analysis unavailable" };
+            return {
+                persuasiveness: 50,
+                claim_score: 50,
+                answer_score: 50,
+                attack_score: 50,
+                vagueness_penalty: 0,
+                key_point: "Analysis unavailable",
+                weakness: "Could not analyze"
+            };
         }
     }
-
 }

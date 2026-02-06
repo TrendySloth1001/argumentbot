@@ -20,6 +20,8 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   late User _currentUser;
 
+  static const Color neonGreen = Color(0xFF00FF88);
+
   @override
   void initState() {
     super.initState();
@@ -40,7 +42,6 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Build screens dynamically so they get the updated user
     final screens = [
       HomeTab(user: _currentUser),
       const FeedScreen(),
@@ -54,23 +55,21 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.black,
-          boxShadow: [
-            BoxShadow(blurRadius: 20, color: Colors.white.withOpacity(.1)),
-          ],
+          border: Border(top: BorderSide(color: Colors.grey[900]!)),
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: GNav(
-              rippleColor: Colors.grey[800]!,
-              hoverColor: Colors.grey[700]!,
+              rippleColor: neonGreen.withAlpha(40),
+              hoverColor: neonGreen.withAlpha(30),
               gap: 8,
-              activeColor: Colors.blueAccent,
-              iconSize: 24,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              duration: const Duration(milliseconds: 400),
-              tabBackgroundColor: Colors.grey[900]!,
-              color: Colors.grey[400],
+              activeColor: neonGreen,
+              iconSize: 22,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              duration: const Duration(milliseconds: 300),
+              tabBackgroundColor: neonGreen.withAlpha(26),
+              color: Colors.grey[500],
               tabs: const [
                 GButton(icon: LineIcons.home, text: 'Home'),
                 GButton(icon: LineIcons.globe, text: 'Feed'),
@@ -79,9 +78,7 @@ class _MainScreenState extends State<MainScreen> {
               ],
               selectedIndex: _selectedIndex,
               onTabChange: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
+                setState(() => _selectedIndex = index);
               },
             ),
           ),

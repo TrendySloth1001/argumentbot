@@ -18,7 +18,6 @@ class _FeedScreenState extends State<FeedScreen> {
   bool _hasMore = true;
   final ScrollController _scrollController = ScrollController();
 
-  // Theme colors
   static const Color neonGreen = Color(0xFF00FF88);
 
   @override
@@ -70,6 +69,24 @@ class _FeedScreenState extends State<FeedScreen> {
     _hasMore = true;
     _posts.clear();
     await _loadFeed();
+  }
+
+  Future<void> _toggleLike(Post post, int index) async {
+    final wasLiked = post.isLiked;
+    setState(() {
+      _posts[index].isLiked = !wasLiked;
+    });
+
+    try {
+      await _feedService.toggleLike(post.id);
+    } catch (e) {
+      // Revert on error
+      if (mounted) {
+        setState(() {
+          _posts[index].isLiked = wasLiked;
+        });
+      }
+    }
   }
 
   @override
@@ -130,8 +147,7 @@ class _FeedScreenState extends State<FeedScreen> {
                                   )
                                 : const SizedBox(height: 50);
                           }
-                          final post = _posts[index];
-                          return _buildPostItem(post);
+                          return _buildPostItem(_posts[index], index);
                         },
                       ),
               ),
@@ -180,26 +196,21 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  Widget _buildPostItem(Post post) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Author row
-            Row(
+  Widget _buildPostItem(Post post, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Author row - tappable to open post
+          GestureDetector(
+            onTap: () => _openPost(post),
+            child: Row(
               children: [
                 Container(
                   width: 36,
@@ -252,64 +263,112 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // Content
-            if (post.description != null && post.description!.isNotEmpty)
-              Text(
-                post.description!,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: neonGreen.withAlpha(26),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: neonGreen.withAlpha(77)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.forum_outlined, color: neonGreen, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      post.debate.topic,
-                      style: const TextStyle(color: neonGreen, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Stats
-            const SizedBox(height: 12),
-            Row(
+          ),
+          const SizedBox(height: 12),
+
+          // Content - tappable to open post
+          GestureDetector(
+            onTap: () => _openPost(post),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.favorite_border, color: Colors.grey[600], size: 18),
-                const SizedBox(width: 4),
-                Text(
-                  '${post.likeCount}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                ),
-                const SizedBox(width: 16),
-                Icon(
-                  Icons.chat_bubble_outline,
-                  color: Colors.grey[600],
-                  size: 18,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${post.commentCount}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                if (post.description != null && post.description!.isNotEmpty)
+                  Text(
+                    post.description!,
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: neonGreen.withAlpha(26),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: neonGreen.withAlpha(77)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.forum_outlined,
+                        color: neonGreen,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          post.debate.topic,
+                          style: const TextStyle(
+                            color: neonGreen,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Stats row - like button is tappable separately
+          Row(
+            children: [
+              // Like button
+              GestureDetector(
+                onTap: () => _toggleLike(post, index),
+                child: Row(
+                  children: [
+                    Icon(
+                      post.isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: post.isLiked ? Colors.redAccent : Colors.grey[600],
+                      size: 20,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post.likeCount + (post.isLiked ? 1 : 0)}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              // Comments - opens post
+              GestureDetector(
+                onTap: () => _openPost(post),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      color: Colors.grey[600],
+                      size: 18,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post.commentCount}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
+    );
+  }
+
+  void _openPost(Post post) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
     );
   }
 

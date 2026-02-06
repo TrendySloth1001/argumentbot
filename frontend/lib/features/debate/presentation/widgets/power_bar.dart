@@ -3,74 +3,130 @@ import 'package:flutter/material.dart';
 class PowerBar extends StatelessWidget {
   final double scoreA;
   final double scoreB;
+  final bool showPercentages;
 
-  const PowerBar({super.key, required this.scoreA, required this.scoreB});
+  static const Color neonGreen = Color(0xFF00FF88);
+
+  const PowerBar({
+    super.key,
+    required this.scoreA,
+    required this.scoreB,
+    this.showPercentages = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final total = scoreA + scoreB;
     if (total == 0) return const SizedBox.shrink();
 
-    final percentA = scoreA / total;
+    final percentA = (scoreA / total * 100).toInt();
+    final percentB = 100 - percentA;
+
+    return Column(
+      children: [
+        Container(
+          height: 8,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: Colors.grey[850],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Row(
+              children: [
+                // Side A - Neon Green (Pro)
+                Expanded(
+                  flex: percentA.clamp(1, 99),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [neonGreen, neonGreen.withAlpha(200)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                ),
+                // Side B - Grey (Con)
+                Expanded(
+                  flex: percentB.clamp(1, 99),
+                  child: Container(color: Colors.grey[700]),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (showPercentages) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$percentA%',
+                style: const TextStyle(
+                  color: neonGreen,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '$percentB%',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// Mini version for cards - just the bar, no percentages
+class MiniPowerBar extends StatelessWidget {
+  final double scoreA;
+  final double scoreB;
+
+  static const Color neonGreen = Color(0xFF00FF88);
+
+  const MiniPowerBar({super.key, required this.scoreA, required this.scoreB});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = scoreA + scoreB;
+    if (total == 0) {
+      return Container(
+        height: 3,
+        decoration: BoxDecoration(
+          color: Colors.grey[800],
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
+    }
+
+    final percentA = (scoreA / total * 100).toInt();
 
     return Container(
-      height: 30,
-      width: double.infinity,
+      height: 3,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: const [
-          BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2)),
-        ],
+        borderRadius: BorderRadius.circular(2),
+        color: Colors.grey[800],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(2),
         child: Row(
           children: [
-            // Side A
             Expanded(
-              flex: (percentA * 100).toInt(),
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)], // Purple
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                ),
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.only(left: 10),
-                child: Text(
-                  '${(percentA * 100).toInt()}%',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+              flex: percentA.clamp(1, 99),
+              child: Container(color: neonGreen),
             ),
-            // Side B
             Expanded(
-              flex: 100 - (percentA * 100).toInt(),
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF00B4DB), Color(0xFF0083B0)], // Cyan
-                    begin: Alignment.centerRight,
-                    end: Alignment.centerLeft,
-                  ),
-                ),
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 10),
-                child: Text(
-                  '${(100 - (percentA * 100).toInt())}%',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+              flex: (100 - percentA).clamp(1, 99),
+              child: Container(color: Colors.grey[700]),
             ),
           ],
         ),

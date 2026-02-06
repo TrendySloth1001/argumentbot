@@ -5,6 +5,8 @@ import '../../../debate/data/models/debate.dart';
 import '../../../debate/data/services/debate_service.dart';
 import '../../../debate/presentation/screens/debate_screen.dart';
 import '../../../debate/presentation/screens/debate_setup_screen.dart';
+import '../../../debate/presentation/screens/debate_history_screen.dart';
+import '../../../debate/presentation/widgets/power_bar.dart';
 
 class HomeTab extends StatefulWidget {
   final User user;
@@ -20,7 +22,6 @@ class _HomeTabState extends State<HomeTab> {
   List<Debate> _recentDebates = [];
   bool _isLoading = true;
 
-  // Theme colors
   static const Color neonGreen = Color(0xFF00FF88);
 
   @override
@@ -65,7 +66,7 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 32),
                 _buildDivider(),
                 const SizedBox(height: 24),
-                _buildSectionTitle('Recent'),
+                _buildSectionTitle('Recent Debates'),
                 const SizedBox(height: 16),
                 _buildRecentList(),
               ],
@@ -79,7 +80,6 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildHeader() {
     return Row(
       children: [
-        // Avatar with neon border and image
         Container(
           width: 48,
           height: 48,
@@ -225,13 +225,44 @@ class _HomeTabState extends State<HomeTab> {
             color: Colors.grey[500],
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
+            letterSpacing: 1.2,
           ),
         ),
         if (_recentDebates.isNotEmpty)
-          Text(
-            'See All',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DebateHistoryScreen(),
+                ),
+              ).then((_) => _loadDebates());
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: neonGreen.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'See All',
+                    style: TextStyle(
+                      color: neonGreen.withAlpha(200),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    color: neonGreen.withAlpha(200),
+                    size: 10,
+                  ),
+                ],
+              ),
+            ),
           ),
       ],
     );
@@ -282,6 +313,19 @@ class _HomeTabState extends State<HomeTab> {
     }
     final isFinished = debate.status == 'FINISHED';
 
+    // Calculate scores for mini bar
+    double scoreA = 50, scoreB = 50;
+    for (var turn in debate.turns) {
+      if (turn.analysis != null) {
+        final p = (turn.analysis!['persuasiveness'] ?? 50) as num;
+        if (turn.speaker == 'MODEL_A') {
+          scoreA += p.toDouble();
+        } else {
+          scoreB += p.toDouble();
+        }
+      }
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -292,26 +336,28 @@ class _HomeTabState extends State<HomeTab> {
         );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.grey[900]!)),
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isFinished ? Colors.grey[600] : neonGreen,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isFinished ? Colors.grey[600] : neonGreen,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
                     debate.topic,
                     style: const TextStyle(
                       color: Colors.white,
@@ -321,15 +367,23 @@ class _HomeTabState extends State<HomeTab> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    dateStr,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                ],
+                ),
+                Icon(Icons.chevron_right, color: Colors.grey[700], size: 20),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 20),
+              child: Text(
+                dateStr,
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[700], size: 20),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 20),
+              child: MiniPowerBar(scoreA: scoreA, scoreB: scoreB),
+            ),
           ],
         ),
       ),
