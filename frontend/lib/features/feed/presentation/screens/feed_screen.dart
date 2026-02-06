@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/services/feed_service.dart';
 import '../../data/models/post.dart';
-import '../widgets/post_card.dart';
 import 'post_detail_screen.dart';
 
 class FeedScreen extends StatefulWidget {
@@ -18,6 +17,9 @@ class _FeedScreenState extends State<FeedScreen> {
   String? _cursor;
   bool _hasMore = true;
   final ScrollController _scrollController = ScrollController();
+
+  // Theme colors
+  static const Color neonGreen = Color(0xFF00FF88);
 
   @override
   void initState() {
@@ -40,7 +42,6 @@ class _FeedScreenState extends State<FeedScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // In a real implementation, we'd handle cursor pagination better
       final newPosts = await _feedService.getFeed(cursor: _cursor);
       setState(() {
         if (newPosts.isEmpty) {
@@ -51,7 +52,6 @@ class _FeedScreenState extends State<FeedScreen> {
         }
       });
     } catch (e) {
-      print('Error loading feed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -76,67 +76,248 @@ class _FeedScreenState extends State<FeedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text(
-          'Community Feed',
-          style: TextStyle(fontWeight: FontWeight.bold),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Feed',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _refresh,
+                    child: Icon(Icons.refresh, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            _buildDivider(),
+            // Content
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                color: neonGreen,
+                child: _posts.isEmpty && !_isLoading
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
+                        itemCount: _posts.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == _posts.length) {
+                            return _isLoading
+                                ? const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(20),
+                                      child: CircularProgressIndicator(
+                                        color: neonGreen,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox(height: 50);
+                          }
+                          final post = _posts[index];
+                          return _buildPostItem(post);
+                        },
+                      ),
+              ),
+            ),
+          ],
         ),
-        backgroundColor: Colors.black,
-        elevation: 0,
-        actions: [IconButton(icon: Icon(Icons.refresh), onPressed: _refresh)],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(16),
-          itemCount: _posts.length + 1,
-          itemBuilder: (context, index) {
-            if (_posts.isEmpty && !_isLoading) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.only(top: 100),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      height: 1,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.grey[800]!,
+            Colors.grey[800]!,
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.2, 0.8, 1.0],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.chat_bubble_outline, color: Colors.grey[700], size: 48),
+          const SizedBox(height: 16),
+          Text(
+            'No posts yet',
+            style: TextStyle(color: Colors.grey[600], fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Be the first to share a debate!',
+            style: TextStyle(color: Colors.grey[700], fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostItem(Post post) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Author row
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: neonGreen, width: 1.5),
+                  ),
+                  child: ClipOval(
+                    child:
+                        post.authorAvatarUrl != null &&
+                            post.authorAvatarUrl!.isNotEmpty
+                        ? Image.network(
+                            post.authorAvatarUrl!,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            color: Colors.black,
+                            alignment: Alignment.center,
+                            child: Text(
+                              post.authorName.isNotEmpty
+                                  ? post.authorName[0].toUpperCase()
+                                  : 'U',
+                              style: const TextStyle(
+                                color: neonGreen,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.feed_outlined, size: 60, color: Colors.grey),
-                      SizedBox(height: 16),
                       Text(
-                        'No posts yet.\nBe the first to share a debate!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                        post.authorName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        _formatTime(post.createdAt),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                     ],
                   ),
                 ),
-              );
-            }
-
-            if (index == _posts.length) {
-              return _isLoading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  : const SizedBox(height: 50);
-            }
-
-            final post = _posts[index];
-            return PostCard(
-              post: post,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PostDetailScreen(post: post),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Content
+            if (post.description != null && post.description!.isNotEmpty)
+              Text(
+                post.description!,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: neonGreen.withAlpha(26),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: neonGreen.withAlpha(77)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.forum_outlined, color: neonGreen, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      post.debate.topic,
+                      style: const TextStyle(color: neonGreen, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                );
-              },
-            );
-          },
+                ],
+              ),
+            ),
+            // Stats
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.favorite_border, color: Colors.grey[600], size: 18),
+                const SizedBox(width: 4),
+                Text(
+                  '${post.likeCount}',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+                const SizedBox(width: 16),
+                Icon(
+                  Icons.chat_bubble_outline,
+                  color: Colors.grey[600],
+                  size: 18,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${post.commentCount}',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  String _formatTime(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }

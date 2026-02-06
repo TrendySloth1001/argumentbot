@@ -20,6 +20,9 @@ class _HomeTabState extends State<HomeTab> {
   List<Debate> _recentDebates = [];
   bool _isLoading = true;
 
+  // Theme colors
+  static const Color neonGreen = Color(0xFF00FF88);
+
   @override
   void initState() {
     super.initState();
@@ -47,28 +50,21 @@ class _HomeTabState extends State<HomeTab> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadDebates,
-          color: const Color(0xFF00FF88),
+          color: neonGreen,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 _buildHeader(),
-
                 const SizedBox(height: 32),
                 _buildDivider(),
                 const SizedBox(height: 32),
-
-                // New Debate CTA
                 _buildNewDebateCard(),
-
                 const SizedBox(height: 32),
                 _buildDivider(),
                 const SizedBox(height: 24),
-
-                // Recent Activity
                 _buildSectionTitle('Recent'),
                 const SizedBox(height: 16),
                 _buildRecentList(),
@@ -83,31 +79,26 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildHeader() {
     return Row(
       children: [
-        // Avatar
+        // Avatar with neon border and image
         Container(
           width: 48,
           height: 48,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF00FF88), width: 2),
+            border: Border.all(color: neonGreen, width: 2),
           ),
-          child: CircleAvatar(
-            backgroundColor: Colors.black,
-            backgroundImage: widget.user.avatarUrl != null
-                ? NetworkImage(widget.user.avatarUrl!)
-                : null,
-            child: widget.user.avatarUrl == null
-                ? Text(
-                    widget.user.username.isNotEmpty
-                        ? widget.user.username[0].toUpperCase()
-                        : 'U',
-                    style: const TextStyle(
-                      color: Color(0xFF00FF88),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
+          child: ClipOval(
+            child:
+                widget.user.avatarUrl != null &&
+                    widget.user.avatarUrl!.isNotEmpty
+                ? Image.network(
+                    widget.user.avatarUrl!,
+                    fit: BoxFit.cover,
+                    width: 44,
+                    height: 44,
+                    errorBuilder: (_, __, ___) => _buildAvatarFallback(),
                   )
-                : null,
+                : _buildAvatarFallback(),
           ),
         ),
         const SizedBox(width: 16),
@@ -117,11 +108,7 @@ class _HomeTabState extends State<HomeTab> {
             children: [
               Text(
                 'Welcome back',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 13,
-                  letterSpacing: 0.5,
-                ),
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
               ),
               const SizedBox(height: 2),
               Text(
@@ -137,6 +124,23 @@ class _HomeTabState extends State<HomeTab> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAvatarFallback() {
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      child: Text(
+        widget.user.username.isNotEmpty
+            ? widget.user.username[0].toUpperCase()
+            : 'U',
+        style: const TextStyle(
+          color: neonGreen,
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+        ),
+      ),
     );
   }
 
@@ -170,7 +174,7 @@ class _HomeTabState extends State<HomeTab> {
         decoration: BoxDecoration(
           color: Colors.black,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF00FF88).withOpacity(0.3)),
+          border: Border.all(color: neonGreen.withAlpha(77)),
         ),
         child: Row(
           children: [
@@ -178,10 +182,10 @@ class _HomeTabState extends State<HomeTab> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: const Color(0xFF00FF88).withOpacity(0.1),
+                color: neonGreen.withAlpha(26),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.add, color: Color(0xFF00FF88), size: 28),
+              child: const Icon(Icons.add, color: neonGreen, size: 28),
             ),
             const SizedBox(width: 20),
             Expanded(
@@ -225,14 +229,9 @@ class _HomeTabState extends State<HomeTab> {
           ),
         ),
         if (_recentDebates.isNotEmpty)
-          GestureDetector(
-            onTap: () {
-              // Navigate to all debates
-            },
-            child: Text(
-              'See All',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
+          Text(
+            'See All',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
       ],
     );
@@ -243,10 +242,7 @@ class _HomeTabState extends State<HomeTab> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(
-            color: Color(0xFF00FF88),
-            strokeWidth: 2,
-          ),
+          child: CircularProgressIndicator(color: neonGreen, strokeWidth: 2),
         ),
       );
     }
@@ -296,7 +292,6 @@ class _HomeTabState extends State<HomeTab> {
         );
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 1),
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: Colors.grey[900]!)),
@@ -308,7 +303,7 @@ class _HomeTabState extends State<HomeTab> {
               height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isFinished ? Colors.grey[600] : const Color(0xFF00FF88),
+                color: isFinished ? Colors.grey[600] : neonGreen,
               ),
             ),
             const SizedBox(width: 16),

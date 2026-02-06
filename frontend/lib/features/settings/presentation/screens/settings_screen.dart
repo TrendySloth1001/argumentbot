@@ -16,7 +16,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _scoringMode = 'AI';
   bool _isLoading = true;
-  bool _policyAccepted = true;
+
+  // Theme colors
+  static const Color neonGreen = Color(0xFF00FF88);
 
   @override
   void initState() {
@@ -35,9 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _updateScoringMode(String? newMode) async {
     if (newMode == null) return;
     await SettingsManager.setScoringMode(newMode);
-    setState(() {
-      _scoringMode = newMode;
-    });
+    setState(() => _scoringMode = newMode);
   }
 
   Future<void> _openGitHub() async {
@@ -64,76 +64,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: neonGreen))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    const Text(
+                      'Settings',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    _buildDivider(),
+                    const SizedBox(height: 24),
+
+                    // Debate Analysis
+                    _buildSectionTitle('Debate Analysis'),
+                    const SizedBox(height: 12),
+                    _buildRadioOption(
+                      title: 'AI Judge',
+                      subtitle: 'Slower (5s), deeper analysis',
+                      value: 'AI',
+                    ),
+                    _buildRadioOption(
+                      title: 'Algorithmic Judge',
+                      subtitle: 'Instant heuristic scoring',
+                      value: 'ALGO',
+                    ),
+
+                    const SizedBox(height: 24),
+                    _buildDivider(),
+                    const SizedBox(height: 24),
+
+                    // Legal
+                    _buildSectionTitle('Legal'),
+                    const SizedBox(height: 12),
+                    _buildListTile(
+                      icon: Icons.description_outlined,
+                      title: 'Terms & Privacy Policy',
+                      subtitle: 'Accepted',
+                      onTap: _showPolicyPage,
+                    ),
+
+                    const SizedBox(height: 24),
+                    _buildDivider(),
+                    const SizedBox(height: 24),
+
+                    // Open Source
+                    _buildSectionTitle('Open Source'),
+                    const SizedBox(height: 12),
+                    _buildGitHubCard(),
+                  ],
+                ),
+              ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildSectionHeader('Debate Analysis'),
-                _buildRadioOption(
-                  title: 'AI Judge',
-                  subtitle:
-                      'Slower (5s), but deeper analysis and better insights.',
-                  value: 'AI',
-                  groupValue: _scoringMode,
-                  onChanged: _updateScoringMode,
-                ),
-                _buildRadioOption(
-                  title: 'Algorithmic Judge',
-                  subtitle: 'Instant results using heuristic scoring.',
-                  value: 'ALGO',
-                  groupValue: _scoringMode,
-                  onChanged: _updateScoringMode,
-                ),
+    );
+  }
 
-                const SizedBox(height: 24),
-                _buildSectionHeader('Legal'),
-                _buildListTile(
-                  icon: Icons.description_outlined,
-                  title: 'Terms & Privacy Policy',
-                  subtitle: _policyAccepted ? 'Accepted' : 'Not accepted',
-                  onTap: _showPolicyPage,
-                ),
+  Widget _buildDivider() {
+    return Container(
+      height: 1,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.grey[800]!,
+            Colors.grey[800]!,
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.2, 0.8, 1.0],
+        ),
+      ),
+    );
+  }
 
-                const SizedBox(height: 24),
-                _buildSectionHeader('Open Source'),
-                _buildGitHubCard(),
-              ],
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        color: Colors.grey[500],
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.5,
+      ),
+    );
+  }
+
+  Widget _buildRadioOption({
+    required String title,
+    required String subtitle,
+    required String value,
+  }) {
+    final isSelected = value == _scoringMode;
+    return GestureDetector(
+      onTap: () => _updateScoringMode(value),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+          border: isSelected ? Border.all(color: neonGreen) : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? neonGreen : Colors.grey[600]!,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? Center(
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: neonGreen,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: neonGreen, size: 22),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[600]),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildGitHubCard() {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1a1a2e), Color(0xFF16213e)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[800]!),
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: neonGreen.withAlpha(77)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.code, color: Colors.white, size: 24),
-              ),
+              Icon(Icons.code, color: neonGreen, size: 22),
               const SizedBox(width: 12),
               const Expanded(
                 child: Column(
@@ -143,7 +283,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'TrendySloth1001/argumentbot',
                       style: TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
@@ -159,15 +299,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.black26,
+              color: Colors.black,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
               "So you've been using this app for free, huh?\n\n"
               "Look, I'm not saying you OWE me anything... but if you're a dev "
               "and you haven't starred the repo yet, that's kinda sus.\n\n"
-              "Just saying... the star button doesn't bite. Fork it if you're brave enough. "
-              "Or don't. See if I care.",
+              "Just saying... the star button doesn't bite. Fork it if you're brave enough.",
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 13,
@@ -179,27 +318,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _openGitHub,
-                  icon: const Icon(Icons.star_border, size: 18),
-                  label: const Text('Star It'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8E2DE2),
-                    foregroundColor: Colors.white,
+                child: GestureDetector(
+                  onTap: _openGitHub,
+                  child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: neonGreen,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.star_border, color: Colors.black, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Star It',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _openGitHub,
-                  icon: const Icon(Icons.fork_right, size: 18),
-                  label: const Text('Fork It'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.grey),
+                child: GestureDetector(
+                  onTap: _openGitHub,
+                  child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[700]!),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.fork_right,
+                          color: Colors.grey[400],
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Fork It',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -209,86 +383,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10, top: 8),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: Colors.grey[500],
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.blueAccent),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: Colors.grey[400], fontSize: 12),
-        ),
-        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-        onTap: onTap,
-      ),
-    );
-  }
-
-  Widget _buildRadioOption({
-    required String title,
-    required String subtitle,
-    required String value,
-    required String groupValue,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final isSelected = value == groupValue;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        border: isSelected ? Border.all(color: const Color(0xFF8E2DE2)) : null,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: RadioListTile<String>(
-        value: value,
-        groupValue: groupValue,
-        onChanged: onChanged,
-        activeColor: const Color(0xFF8E2DE2),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: Colors.grey[400], fontSize: 12),
-        ),
-      ),
-    );
-  }
 }
 
 // Full-page Policy Screen
 class PolicyPage extends StatelessWidget {
   const PolicyPage({super.key});
+
+  static const Color neonGreen = Color(0xFF00FF88);
 
   @override
   Widget build(BuildContext context) {
@@ -301,12 +402,15 @@ class PolicyPage extends StatelessWidget {
         ),
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
       ),
       body: FutureBuilder<http.Response>(
         future: http.get(Uri.parse('${ApiConfig.baseUrl}/policy')),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: neonGreen),
+            );
           }
           if (snapshot.hasError) {
             return Center(
@@ -332,7 +436,7 @@ class PolicyPage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
               h2: const TextStyle(
-                color: Colors.blueAccent,
+                color: neonGreen,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),

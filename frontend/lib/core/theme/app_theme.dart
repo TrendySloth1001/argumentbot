@@ -1,54 +1,146 @@
 import 'package:flutter/material.dart';
 
+/// App-wide theme constants
+/// Design: Minimalist black with neon green accents
 class AppTheme {
-  static final ThemeData darkTheme = ThemeData(
-    useMaterial3: true,
+  // Primary colors
+  static const Color background = Colors.black;
+  static const Color neonGreen = Color(0xFF00FF88);
+  static const Color neonPurple = Color(0xFF8E2DE2);
+
+  // Dark theme for MaterialApp
+  static ThemeData get darkTheme => ThemeData(
     brightness: Brightness.dark,
-    scaffoldBackgroundColor: Colors.black,
+    scaffoldBackgroundColor: background,
+    primaryColor: neonGreen,
     colorScheme: const ColorScheme.dark(
-      primary: Color(0xFF2979FF), // Electric Blue
-      secondary: Color(0xFF00E5FF), // Cyan Accent
-      surface: Color(0xFF121212),
-      background: Colors.black,
-      onPrimary: Colors.white,
-      onSurface: Colors.white,
+      primary: neonGreen,
+      secondary: neonPurple,
+      surface: Colors.black,
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: const Color(0xFF1E1E1E),
-      hintStyle: const TextStyle(color: Color(0xFF757575)),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF2979FF), width: 2),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: background,
+      foregroundColor: Colors.white,
+      elevation: 0,
     ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF2979FF),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
+    progressIndicatorTheme: const ProgressIndicatorThemeData(color: neonGreen),
+  );
+
+  // Text colors
+  static const Color textPrimary = Colors.white;
+  static Color textSecondary = Colors.grey[400]!;
+  static Color textMuted = Colors.grey[600]!;
+
+  // Surface colors
+  static Color surface = Colors.grey[900]!;
+  static Color surfaceLight = Colors.grey[800]!;
+  static Color divider = Colors.grey[800]!;
+
+  // Accent color (use neonGreen as primary accent)
+  static const Color accent = neonGreen;
+
+  // Status colors
+  static const Color active = neonGreen;
+  static Color inactive = Colors.grey[600]!;
+  static const Color error = Colors.redAccent;
+  static const Color success = neonGreen;
+
+  // Text styles
+  static const TextStyle headingLarge = TextStyle(
+    color: textPrimary,
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+  );
+
+  static const TextStyle headingMedium = TextStyle(
+    color: textPrimary,
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+  );
+
+  static const TextStyle bodyText = TextStyle(
+    color: Colors.white70,
+    fontSize: 14,
+  );
+
+  static TextStyle labelText = TextStyle(
+    color: Colors.grey[500],
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.5,
+  );
+
+  // Decorations
+  static BoxDecoration cardDecoration = BoxDecoration(
+    color: surface,
+    borderRadius: BorderRadius.circular(12),
+  );
+
+  static BoxDecoration accentCardDecoration = BoxDecoration(
+    color: background,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: neonGreen.withAlpha(77)),
+  );
+
+  // Gradient divider
+  static Widget gradientDivider() {
+    return Container(
+      height: 1,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.grey[800]!,
+            Colors.grey[800]!,
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.2, 0.8, 1.0],
         ),
       ),
-    ),
-    textTheme: const TextTheme(
-      headlineMedium: TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.w800,
-        color: Colors.white,
-        letterSpacing: -1.0,
+    );
+  }
+
+  // Avatar with neon border
+  static Widget avatar({
+    String? imageUrl,
+    String? fallbackText,
+    double size = 48,
+    double borderWidth = 2,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: neonGreen, width: borderWidth),
       ),
-      bodyLarge: TextStyle(fontSize: 16, color: Color(0xFFE0E0E0)),
-    ),
-  );
+      child: ClipOval(
+        child: imageUrl != null && imageUrl.isNotEmpty
+            ? Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                width: size - borderWidth * 2,
+                height: size - borderWidth * 2,
+                errorBuilder: (_, __, ___) =>
+                    _avatarFallback(fallbackText, size),
+              )
+            : _avatarFallback(fallbackText, size),
+      ),
+    );
+  }
+
+  static Widget _avatarFallback(String? text, double size) {
+    return Container(
+      color: background,
+      alignment: Alignment.center,
+      child: Text(
+        (text?.isNotEmpty == true) ? text![0].toUpperCase() : 'U',
+        style: TextStyle(
+          color: neonGreen,
+          fontWeight: FontWeight.bold,
+          fontSize: size * 0.4,
+        ),
+      ),
+    );
+  }
 }
