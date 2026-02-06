@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../data/models/post.dart';
 import '../../data/services/feed_service.dart';
 import '../../../debate/presentation/widgets/debate_turn_item.dart';
-import '../../../debate/presentation/widgets/debate_turn_item.dart';
 import '../../../debate/presentation/widgets/power_bar.dart';
 
 class PostDetailScreen extends StatefulWidget {

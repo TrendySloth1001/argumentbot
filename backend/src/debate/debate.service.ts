@@ -197,8 +197,10 @@ export class DebateService {
             },
         });
 
-        await this.cacheManager.del('debates:all'); // Invalidate list
-        await this.cacheManager.del('debates:all'); // Invalidate list
+        await this.cacheManager.del('debates:all');
+        if (userId) {
+            await this.cacheManager.del(`debates:user:${userId}`);
+        }
         return debate;
     }
 
