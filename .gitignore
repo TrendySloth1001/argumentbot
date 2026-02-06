@@ -1,0 +1,21 @@
+# General
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.swp
+
+# Backend (Node.js / NestJS)
+**/node_modules/
+**/dist/
+**/npm-debug.log
+**/.env
+**/coverage/
+
+# Frontend (Flutter)
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/android/local.properties
+**/ios/.generated/
