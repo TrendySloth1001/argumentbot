@@ -29,6 +29,11 @@ export class DebateService {
         const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
         const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
 
+        // Dynamic Model Selection
+        // MODEL_A = Proponent (Llama 3.2: Fast, Consistent)
+        // MODEL_B = Opponent (Gemma 2:2b: Creative, Different Tone)
+        const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
+
         const context = await this.ragService.searchSimilar(lastTurn.content);
         const contextText = context.map((d) => d.content).join('\n');
 
@@ -42,19 +47,24 @@ export class DebateService {
         ${contextText}
 
         Instructions:
-        1. Start your response with a concise main argument using clear language.
-        2. Use bullet points for key supporting details.
-        3. END your response with a dedicated section header: "### Counter Question".
-        4. Under that header, ask a provocative simple question.
+        1. FIRST, start with a section header: "## Answer".
+        2. Under "## Answer", directly address the opponent's main point or question.
+        3. Then, provide your own concise main argument using clear language.
+        4. END your response with a dedicated section header: "### Counter Question".
+        5. Under that header, ask a provocative simple question to the opponent.
+        6. CRITICAL: Keep your entire response UNDER 100 WORDS.
 
         Format:
-        [Your Argument Here]
+        ## Answer
+        [Direct Answer/Rebuttal]
+
+        [Main Argument]
         
         ### Counter Question
         [Your Question Here]
         `;
 
-        const stream = await this.llmService.generateStream(prompt, 'llama3.2');
+        const stream = await this.llmService.generateStream(prompt, activeModel);
 
         // We return the stream + metadata needed to save the turn later
         return {
@@ -63,18 +73,19 @@ export class DebateService {
             speaker: nextSpeaker,
             topic: debate.topic,
             lastTurnContent: lastTurn.content,
-            scoringMode
+            scoringMode,
+            modelName: activeModel // Pass the chosen model name
         };
     }
 
-    async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string) {
+    async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string) {
         // Create Turn
         const newTurn = await this.prisma.debateTurn.create({
             data: {
                 debateId,
                 speaker,
                 content,
-                modelName: 'llama3.2'
+                modelName: modelName
             },
         });
 
@@ -125,6 +136,7 @@ export class DebateService {
                 debateId: debate.id,
                 speaker: Speaker.MODEL_A,
                 content: response,
+                modelName: 'llama3.2'
             },
         });
 
@@ -152,6 +164,9 @@ export class DebateService {
         const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
         const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
 
+        // Multi-model for non-streaming
+        const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
+
         // 1. Retrieve relevant context (RAG)
         const context = await this.ragService.searchSimilar(lastTurn.content);
         const contextText = context.map((d) => d.content).join('\n');
@@ -167,13 +182,13 @@ export class DebateService {
         ${contextText}
 
         Instructions:
-        - Directly rebut the opponent's points.
-        - Use strong, persuasive language.
-        - END with a provocative counter-question to put the opponent on the defensive.
-        - Keep it under 3 sentences.
+        - Start with "## Answer" to rebut the opponent.
+        - Use strong, persuasive language for your argument.
+        - END with "### Counter Question" to ask a provocative question.
+        - CRITICAL: Keep response UNDER 100 WORDS.
         `;
 
-        const responseContent = await this.llmService.generateResponse(prompt, 'llama3.2');
+        const responseContent = await this.llmService.generateResponse(prompt, activeModel);
 
         // 3. Create Turn WITHOUT analysis first
         const newTurn = await this.prisma.debateTurn.create({
@@ -181,6 +196,7 @@ export class DebateService {
                 debateId: debate.id,
                 speaker: nextSpeaker,
                 content: responseContent,
+                modelName: activeModel
             },
         });
 

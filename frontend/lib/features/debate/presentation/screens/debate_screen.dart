@@ -47,7 +47,6 @@ class _DebateScreenState extends State<DebateScreen> {
 
     try {
       String fullContent = '';
-      String? currentSpeaker;
 
       // Temporary turn for UI visualization
       DebateTurn? tempTurn;
@@ -253,6 +252,13 @@ class _DebateScreenState extends State<DebateScreen> {
                     height: 1.6,
                     fontFamily: 'Roboto',
                   ),
+                  h2: const TextStyle(
+                    // Style for ## Answer
+                    color: Colors.lightGreenAccent,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    height: 2.0,
+                  ),
                   h3: const TextStyle(
                     // Style for ### Counter Question
                     color: Colors.amberAccent,
@@ -269,13 +275,13 @@ class _DebateScreenState extends State<DebateScreen> {
                   spacing: 8,
                   children: [
                     if (turn.analysis!['key_point'] != null)
-                      _buildAnalysisTag(
+                      AnalysisTag(
                         icon: Icons.lightbulb_outline,
                         text: turn.analysis!['key_point'] ?? '',
                         color: Colors.amberAccent,
                       ),
                     if ((turn.analysis!['persuasiveness'] ?? 0) > 80)
-                      _buildAnalysisTag(
+                      const AnalysisTag(
                         icon: Icons.local_fire_department,
                         text: 'Strong Point',
                         color: Colors.redAccent,
@@ -288,41 +294,6 @@ class _DebateScreenState extends State<DebateScreen> {
         ),
         Divider(color: Colors.grey[900], thickness: 1),
       ],
-    );
-  }
-
-  Widget _buildAnalysisTag({
-    required IconData icon,
-    required String text,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 12),
-          const SizedBox(width: 4),
-          Flexible(
-            // Ensure text doesn't overflow
-            child: Text(
-              text,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -403,6 +374,68 @@ class _DebateScreenState extends State<DebateScreen> {
                     Icon(Icons.arrow_forward_rounded, size: 20),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+class AnalysisTag extends StatefulWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  const AnalysisTag({
+    super.key,
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  State<AnalysisTag> createState() => _AnalysisTagState();
+}
+
+class _AnalysisTagState extends State<AnalysisTag> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isExpanded = !_isExpanded;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: widget.color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: widget.color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(widget.icon, color: widget.color, size: 12),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                widget.text,
+                style: TextStyle(
+                  color: widget.color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: _isExpanded ? null : 1, // Toggle maxLines
+                overflow: _isExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
     );

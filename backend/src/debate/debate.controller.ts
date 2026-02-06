@@ -18,7 +18,7 @@ export class DebateController {
 
     @Get(':id/stream')
     async streamTurn(@Param('id') id: string, @Query('scoringMode') scoringMode: 'AI' | 'ALGO' = 'AI', @Res() res: Response) {
-        const { stream, debateId, speaker, topic, lastTurnContent } = await this.debateService.processTurnStream(id, scoringMode);
+        const { stream, debateId, speaker, topic, lastTurnContent, modelName } = await this.debateService.processTurnStream(id, scoringMode);
 
         if (!stream) {
             res.end(); // Debate finished or error
@@ -52,8 +52,8 @@ export class DebateController {
                         }
                         if (json.done) {
                             // Save to DB when done
-                            if (debateId && speaker && topic && lastTurnContent) {
-                                await this.debateService.saveTurn(debateId, speaker, fullContent, scoringMode, topic, lastTurnContent);
+                            if (debateId && speaker && topic && lastTurnContent && modelName) {
+                                await this.debateService.saveTurn(debateId, speaker, fullContent, scoringMode, topic, lastTurnContent, modelName);
                             }
                             res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
                         }

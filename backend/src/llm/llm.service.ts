@@ -38,9 +38,19 @@ export class LlmService {
                 }),
             });
 
+            if (response.status !== 200) {
+                throw new Error(`Failed to fetch from Ollama: ${response.statusText}`);
+            }
+
             if (!response.body) throw new Error('ReadableStream not supported in this environment');
             return response.body;
+
         } catch (error) {
+            console.warn(`Primary model ${model} failed, trying fallback to llama3.2...`, error);
+            if (model !== 'llama3.2') {
+                // Fallback recursion
+                return this.generateStream(content, 'llama3.2');
+            }
             console.error('Ollama Stream Error:', error);
             throw new InternalServerErrorException('Failed to stream from AI model');
         }
