@@ -14,7 +14,11 @@
 
 | Home | Debate | History |
 |:----:|:------:|:-------:|
-| ![Home](screenshots/home.png) | ![Debate](screenshots/debate.jpg) | ![History](screenshots/history.png) |
+| ![Home](screenshots/home.jpeg) | ![Debate](screenshots/debate.jpeg) | ![History](screenshots/history.jpeg) |
+
+| Feed | Settings |
+|:----:|:--------:|
+| ![Feed](screenshots/feed.jpeg) | ![Settings](screenshots/settings.jpeg) |
 
 ---
 
