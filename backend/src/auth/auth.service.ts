@@ -32,11 +32,12 @@ export class AuthService {
             length: 3,
         });
 
-        // Create user
+        // Create user with policy auto-accepted
         const user = await this.usersService.create({
             email: registerDto.email,
             username: username,
             passwordHash: hashedPassword,
+            policyAccepted: true,
         });
 
         const payload = { sub: user.id, email: user.email, username: user.username };
@@ -73,6 +74,7 @@ export class AuthService {
                 email: user.email,
                 username: user.username,
                 avatarUrl: user.avatarUrl,
+                policyAccepted: user.policyAccepted,
             },
             token,
         };

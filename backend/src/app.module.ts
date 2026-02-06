@@ -9,6 +9,7 @@ import { LlmModule } from './llm/llm.module';
 import { RagModule } from './rag/rag.module';
 import { DebateModule } from './debate/debate.module';
 import { FeedModule } from './feed/feed.module';
+import { PolicyModule } from './policy/policy.module';
 import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
@@ -22,8 +23,10 @@ import { CacheModule } from '@nestjs/cache-manager';
     RagModule,
     DebateModule,
     FeedModule,
+    PolicyModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule { }
+

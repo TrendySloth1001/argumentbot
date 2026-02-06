@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../../features/auth/data/models/user_model.dart';
+import '../../../auth/data/models/user_model.dart';
 import '../../../debate/data/models/debate.dart';
 import '../../../debate/data/services/debate_service.dart';
-import '../../../debate/presentation/screens/debate_setup_screen.dart';
 import '../../../debate/presentation/screens/debate_screen.dart';
-import '../../../debate/presentation/screens/debate_history_screen.dart';
+import '../../../debate/presentation/screens/debate_setup_screen.dart';
 
 class HomeTab extends StatefulWidget {
   final User user;
@@ -17,19 +16,28 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
-  final _debateService = DebateService();
-  late Future<List<Debate>> _recentDebatesFuture;
+  final DebateService _debateService = DebateService();
+  List<Debate> _recentDebates = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _recentDebatesFuture = _debateService.getDebates();
+    _loadDebates();
   }
 
-  void _refresh() {
-    setState(() {
-      _recentDebatesFuture = _debateService.getDebates();
-    });
+  Future<void> _loadDebates() async {
+    try {
+      final debates = await _debateService.getDebates();
+      if (mounted) {
+        setState(() {
+          _recentDebates = debates.take(5).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -38,18 +46,32 @@ class _HomeTabState extends State<HomeTab> {
       backgroundColor: Colors.black,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => _refresh(),
+          onRefresh: _loadDebates,
+          color: const Color(0xFF00FF88),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header
                 _buildHeader(),
-                const SizedBox(height: 30),
-                _buildHeroActionCard(),
-                const SizedBox(height: 30),
-                _buildRecentActivitySection(),
+
+                const SizedBox(height: 32),
+                _buildDivider(),
+                const SizedBox(height: 32),
+
+                // New Debate CTA
+                _buildNewDebateCard(),
+
+                const SizedBox(height: 32),
+                _buildDivider(),
+                const SizedBox(height: 24),
+
+                // Recent Activity
+                _buildSectionTitle('Recent'),
+                const SizedBox(height: 16),
+                _buildRecentList(),
               ],
             ),
           ),
@@ -61,275 +83,235 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildHeader() {
     return Row(
       children: [
-        CircleAvatar(
-          radius: 25,
-          backgroundColor: Colors.grey[800],
-          backgroundImage: widget.user.avatarUrl != null
-              ? NetworkImage(widget.user.avatarUrl!)
-              : null,
-          child: widget.user.avatarUrl == null
-              ? Text(
-                  widget.user.username.isNotEmpty
-                      ? widget.user.username[0].toUpperCase()
-                      : 'U',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                )
-              : null,
+        // Avatar
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF00FF88), width: 2),
+          ),
+          child: CircleAvatar(
+            backgroundColor: Colors.black,
+            backgroundImage: widget.user.avatarUrl != null
+                ? NetworkImage(widget.user.avatarUrl!)
+                : null,
+            child: widget.user.avatarUrl == null
+                ? Text(
+                    widget.user.username.isNotEmpty
+                        ? widget.user.username[0].toUpperCase()
+                        : 'U',
+                    style: const TextStyle(
+                      color: Color(0xFF00FF88),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  )
+                : null,
+          ),
         ),
-        const SizedBox(width: 15),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Welcome back,',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
-            ),
-            Text(
-              widget.user.username,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Welcome back',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.notifications_none, color: Colors.white),
+              const SizedBox(height: 2),
+              Text(
+                widget.user.username,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildHeroActionCard() {
+  Widget _buildDivider() {
+    return Container(
+      height: 1,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.grey[800]!,
+            Colors.grey[800]!,
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.2, 0.8, 1.0],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewDebateCard() {
     return GestureDetector(
-      onTap: () async {
-        await Navigator.of(context).push(
+      onTap: () {
+        Navigator.push(
+          context,
           MaterialPageRoute(builder: (context) => const DebateSetupScreen()),
-        );
-        _refresh();
+        ).then((_) => _loadDebates());
       },
       child: Container(
-        width: double.infinity,
-        height: 180,
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFF8E2DE2),
-              Color(0xFF4A00E0),
-            ], // Purple/Blue gradient
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF4A00E0).withOpacity(0.4),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF00FF88).withOpacity(0.3)),
         ),
-        child: Stack(
+        child: Row(
           children: [
-            Positioned(
-              right: -20,
-              bottom: -20,
-              child: Icon(
-                Icons.forum,
-                size: 150,
-                color: Colors.white.withOpacity(0.1),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: const Color(0xFF00FF88).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: const Icon(Icons.add, color: Color(0xFF00FF88), size: 28),
             ),
-            Padding(
-              padding: const EdgeInsets.all(24.0),
+            const SizedBox(width: 20),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'NEW DEBATE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
                   const Text(
-                    'Simulate a Clash\nof Minds',
+                    'New Debate',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  const Row(
-                    children: [
-                      Text(
-                        'Start Now',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                      SizedBox(width: 5),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: Colors.white70,
-                        size: 16,
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Start a clash of AI minds',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
                   ),
                 ],
               ),
             ),
+            Icon(Icons.arrow_forward_ios, color: Colors.grey[600], size: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRecentActivitySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSectionTitle(String title) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Recent Activity',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const DebateHistoryScreen(),
-                  ),
-                );
-              },
-              child: const Text(
-                'See All',
-                style: TextStyle(color: Colors.blueAccent),
-              ),
-            ),
-          ],
+        Text(
+          title.toUpperCase(),
+          style: TextStyle(
+            color: Colors.grey[500],
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+          ),
         ),
-        const SizedBox(height: 10),
-        FutureBuilder<List<Debate>>(
-          future: _recentDebatesFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            } else if (snapshot.hasError) {
-              return Text(
-                'Error loading activity',
-                style: TextStyle(color: Colors.red[300]),
-              );
-            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.history_toggle_off,
-                      color: Colors.grey,
-                      size: 40,
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      'No debates yet.',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            // Show top 3 recent debates
-            final debates = snapshot.data!.take(3).toList();
-            return Column(
-              children: debates
-                  .map((debate) => _buildDebatePreviewCard(debate))
-                  .toList(),
-            );
-          },
-        ),
+        if (_recentDebates.isNotEmpty)
+          GestureDetector(
+            onTap: () {
+              // Navigate to all debates
+            },
+            child: Text(
+              'See All',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildDebatePreviewCard(Debate debate) {
-    final dateStr = DateFormat('MMM d, h:mm a').format(
-      DateTime.parse(
-        debate.createdAt ?? DateTime.now().toIso8601String(),
-      ).toLocal(),
+  Widget _buildRecentList() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(
+            color: Color(0xFF00FF88),
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (_recentDebates.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 48),
+        child: Column(
+          children: [
+            Icon(Icons.chat_bubble_outline, color: Colors.grey[700], size: 40),
+            const SizedBox(height: 12),
+            Text(
+              'No debates yet',
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: _recentDebates
+          .map((debate) => _buildDebateItem(debate))
+          .toList(),
     );
+  }
+
+  Widget _buildDebateItem(Debate debate) {
+    String dateStr = '';
+    if (debate.createdAt != null) {
+      try {
+        final date = DateTime.parse(debate.createdAt!);
+        dateStr = DateFormat('MMM d, h:mm a').format(date);
+      } catch (_) {
+        dateStr = debate.createdAt ?? '';
+      }
+    }
     final isFinished = debate.status == 'FINISHED';
 
     return GestureDetector(
-      onTap: () async {
-        await Navigator.push(
+      onTap: () {
+        Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => DebateScreen(debateId: debate.id),
           ),
         );
-        _refresh();
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 1),
+        padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.white10),
+          border: Border(bottom: BorderSide(color: Colors.grey[900]!)),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              width: 8,
+              height: 8,
               decoration: BoxDecoration(
-                color: Colors.black,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: isFinished
-                      ? Colors.green.withOpacity(0.5)
-                      : Colors.blue.withOpacity(0.5),
-                ),
-              ),
-              child: Icon(
-                isFinished ? Icons.check : Icons.sync,
-                color: isFinished ? Colors.greenAccent : Colors.blueAccent,
-                size: 20,
+                color: isFinished ? Colors.grey[600] : const Color(0xFF00FF88),
               ),
             ),
-            const SizedBox(width: 15),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,8 +320,8 @@ class _HomeTabState extends State<HomeTab> {
                     debate.topic,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -352,7 +334,7 @@ class _HomeTabState extends State<HomeTab> {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[600]),
+            Icon(Icons.chevron_right, color: Colors.grey[700], size: 20),
           ],
         ),
       ),

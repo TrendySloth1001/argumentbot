@@ -11,16 +11,17 @@ datasource db {
 
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  username     String    @unique
-  passwordHash String
-  avatarUrl    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  posts        Post[]
-  comments     Comment[]
-  likes        Like[]
+  id             String    @id @default(uuid())
+  email          String    @unique
+  username       String    @unique
+  passwordHash   String
+  avatarUrl      String?
+  policyAccepted Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  posts          Post[]
+  comments       Comment[]
+  likes          Like[]
 }
 
 model Document {
