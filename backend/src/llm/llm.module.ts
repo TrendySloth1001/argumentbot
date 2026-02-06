@@ -6,6 +6,7 @@ import { HttpModule } from '@nestjs/axios';
 @Module({
   imports: [HttpModule],
   providers: [LlmService],
-  controllers: [LlmController]
+  controllers: [LlmController],
+  exports: [LlmService],
 })
 export class LlmModule { }

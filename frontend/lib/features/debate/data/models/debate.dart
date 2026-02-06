@@ -1,0 +1,52 @@
+class Debate {
+  final String id;
+  final String topic;
+  final String status;
+  final String? createdAt;
+  final List<DebateTurn> turns;
+
+  Debate({
+    required this.id,
+    required this.topic,
+    required this.status,
+    required this.turns,
+    this.createdAt,
+  });
+
+  factory Debate.fromJson(Map<String, dynamic> json) {
+    return Debate(
+      id: json['id'],
+      topic: json['topic'],
+      status: json['status'],
+      createdAt: json['createdAt'],
+      turns:
+          (json['turns'] as List<dynamic>?)
+              ?.map((e) => DebateTurn.fromJson(e))
+              .toList() ??
+          [],
+    );
+  }
+}
+
+class DebateTurn {
+  final String id;
+  final String speaker;
+  final String content;
+  final DateTime timestamp;
+
+  DebateTurn({
+    required this.id,
+    required this.speaker,
+    required this.content,
+    required this.timestamp,
+  });
+
+  factory DebateTurn.fromJson(Map<String, dynamic> json) {
+    return DebateTurn(
+      id: json['id'],
+      speaker: json['speaker'],
+      content: json['content'],
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+}

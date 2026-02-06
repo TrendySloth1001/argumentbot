@@ -38,6 +38,8 @@ dependencies:
   google_nav_bar: ^5.0.7
   line_icons: ^2.0.3
   flutter_secure_storage: ^10.0.0
+  device_info_plus: ^12.3.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

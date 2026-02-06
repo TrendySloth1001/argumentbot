@@ -6,9 +6,11 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { LlmModule } from './llm/llm.module';
+import { RagModule } from './rag/rag.module';
+import { DebateModule } from './debate/debate.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), UsersModule, AuthModule, PrismaModule, LlmModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), UsersModule, AuthModule, PrismaModule, LlmModule, RagModule, DebateModule],
   controllers: [AppController],
   providers: [AppService],
 })

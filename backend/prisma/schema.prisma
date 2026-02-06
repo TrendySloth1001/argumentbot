@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -14,4 +16,40 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Document {
+  id        String                 @id @default(uuid())
+  content   String
+  embedding Unsupported("vector")?
+  createdAt DateTime               @default(now())
+
+}
+
+model Debate {
+  id        String       @id @default(uuid())
+  topic     String
+  status    DebateStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  turns     DebateTurn[]
+}
+
+model DebateTurn {
+  id        String   @id @default(uuid())
+  debateId  String
+  speaker   Speaker
+  content   String
+  timestamp DateTime @default(now())
+  debate    Debate   @relation(fields: [debateId], references: [id])
+}
+
+enum DebateStatus {
+  ACTIVE
+  FINISHED
+}
+
+enum Speaker {
+  MODEL_A
+  MODEL_B
 }

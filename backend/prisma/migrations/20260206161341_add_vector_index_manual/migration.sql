@@ -1,0 +1,2 @@
+-- CreateIndex
+-- Index removed due to 2000 dimension limit. Sequential scan will be used.

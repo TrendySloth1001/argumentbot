@@ -3,6 +3,9 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:line_icons/line_icons.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../debate/presentation/screens/debate_setup_screen.dart';
+import '../../../debate/presentation/screens/debate_history_screen.dart';
+import '../widgets/home_tab.dart';
 
 class MainScreen extends StatefulWidget {
   final User user;
@@ -22,12 +25,7 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _screens = [
-      const Center(
-        child: Text(
-          'Home Screen',
-          style: TextStyle(color: Colors.white, fontSize: 24),
-        ),
-      ),
+      HomeTab(user: widget.user),
       const Center(
         child: Text(
           'Posts Screen',
