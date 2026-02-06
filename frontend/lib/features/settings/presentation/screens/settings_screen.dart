@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../../core/config/api_config.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'how_it_works_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -97,6 +98,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: 'Algorithmic Judge',
                       subtitle: 'Instant heuristic scoring',
                       value: 'ALGO',
+                    ),
+
+                    const SizedBox(height: 24),
+                    _buildDivider(),
+                    const SizedBox(height: 24),
+
+                    // About
+                    _buildSectionTitle('About'),
+                    const SizedBox(height: 12),
+                    _buildListTile(
+                      icon: Icons.science_outlined,
+                      title: 'How It Works',
+                      subtitle: 'RAG, scoring, math formulas',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const HowItWorksScreen(),
+                        ),
+                      ),
                     ),
 
                     const SizedBox(height: 24),

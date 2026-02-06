@@ -110,13 +110,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _selectAvatar(BuildContext context, String url) async {
+    // Save messenger before async operation to avoid deactivated widget issue
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context);
     try {
       await AuthService().updateProfile(url);
       setState(() => _currentAvatarUrl = url);
       widget.onAvatarUpdated?.call(url);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Avatar updated!'),
             backgroundColor: neonGreen,
@@ -125,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Failed to update avatar: $e'),
             backgroundColor: Colors.red,

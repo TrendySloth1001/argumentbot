@@ -294,10 +294,15 @@ class _HomeTabState extends State<HomeTab> {
       );
     }
 
-    return Column(
-      children: _recentDebates
-          .map((debate) => _buildDebateItem(debate))
-          .toList(),
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _recentDebates.length,
+      separatorBuilder: (_, __) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: _buildDivider(),
+      ),
+      itemBuilder: (context, index) => _buildDebateItem(_recentDebates[index]),
     );
   }
 
@@ -336,12 +341,8 @@ class _HomeTabState extends State<HomeTab> {
         );
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
-        ),
+        color: Colors.black,
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
