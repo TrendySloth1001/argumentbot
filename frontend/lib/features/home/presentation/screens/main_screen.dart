@@ -3,10 +3,9 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:line_icons/line_icons.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
-import '../../../debate/presentation/screens/debate_setup_screen.dart';
-import '../../../debate/presentation/screens/debate_history_screen.dart';
+import '../../../chat/presentation/screens/chat_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
-import '../widgets/home_tab.dart';
+import '../widgets/home_tab.dart'; // Ensure this exists
 
 class MainScreen extends StatefulWidget {
   final User user;
@@ -27,12 +26,7 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _screens = [
       HomeTab(user: widget.user),
-      const Center(
-        child: Text(
-          'Posts Screen',
-          style: TextStyle(color: Colors.white, fontSize: 24),
-        ),
-      ),
+      const ChatScreen(),
       ProfileScreen(user: widget.user),
       const SettingsScreen(),
     ];
@@ -57,7 +51,7 @@ class _MainScreenState extends State<MainScreen> {
               rippleColor: Colors.grey[800]!,
               hoverColor: Colors.grey[700]!,
               gap: 8,
-              activeColor: Theme.of(context).colorScheme.primary,
+              activeColor: Colors.blueAccent,
               iconSize: 24,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               duration: const Duration(milliseconds: 400),
@@ -65,7 +59,7 @@ class _MainScreenState extends State<MainScreen> {
               color: Colors.grey[400],
               tabs: const [
                 GButton(icon: LineIcons.home, text: 'Home'),
-                GButton(icon: LineIcons.heart, text: 'Posts'),
+                GButton(icon: LineIcons.comments, text: 'Chat'),
                 GButton(icon: LineIcons.user, text: 'Profile'),
                 GButton(icon: LineIcons.cog, text: 'Settings'),
               ],

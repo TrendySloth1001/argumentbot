@@ -5,7 +5,7 @@ import { RagService } from '../rag/rag.service';
 import { ScoringService } from './scoring.service';
 import { DebateStatus, Speaker } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class DebateService {
@@ -48,32 +48,31 @@ export class DebateService {
         await this.cacheManager.set(cacheKey, debates, 600000); // 10 mins
         return debates;
     }
-}
 
     async processTurnStream(debateId: string, scoringMode: 'AI' | 'ALGO' = 'AI') {
-    const debate = await this.prisma.debate.findUnique({
-        where: { id: debateId },
-        include: { turns: { orderBy: { timestamp: 'asc' } } },
-    });
+        const debate = await this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: { orderBy: { timestamp: 'asc' } } },
+        });
 
-    if (!debate) throw new NotFoundException('Debate not found');
-    if (debate.status === DebateStatus.FINISHED) {
-        return { finished: true };
-    }
+        if (!debate) throw new NotFoundException('Debate not found');
+        if (debate.status === DebateStatus.FINISHED) {
+            return { finished: true };
+        }
 
-    const lastTurn = debate.turns[debate.turns.length - 1];
-    const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
-    const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
+        const lastTurn = debate.turns[debate.turns.length - 1];
+        const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
+        const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
 
-    // Dynamic Model Selection
-    // MODEL_A = Proponent (Llama 3.2: Fast, Consistent)
-    // MODEL_B = Opponent (Gemma 2:2b: Creative, Different Tone)
-    const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
+        // Dynamic Model Selection
+        // MODEL_A = Proponent (Llama 3.2: Fast, Consistent)
+        // MODEL_B = Opponent (Gemma 2:2b: Creative, Different Tone)
+        const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
-    const context = await this.ragService.searchSimilar(lastTurn.content);
-    const contextText = context.map((d) => d.content).join('\n');
+        const context = await this.ragService.searchSimilar(lastTurn.content);
+        const contextText = context.map((d) => d.content).join('\n');
 
-    const prompt = `
+        const prompt = `
         You are participating in a debate on the topic: "${debate.topic}".
         You are ${nextSpeaker} (${roleDescription}). 
         
@@ -100,62 +99,65 @@ export class DebateService {
         [Your Question Here]
         `;
 
-    const stream = await this.llmService.generateStream(prompt, activeModel);
+        const stream = await this.llmService.generateStream(prompt, activeModel);
 
-    // We return the stream + metadata needed to save the turn later
-    return {
-        stream,
-        debateId: debate.id,
-        speaker: nextSpeaker,
-        topic: debate.topic,
-        lastTurnContent: lastTurn.content,
-        scoringMode,
-        modelName: activeModel // Pass the chosen model name
-    };
-}
-
-    async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string) {
-    // Create Turn
-    const newTurn = await this.prisma.debateTurn.create({
-        data: {
-            debateId,
-            speaker,
-            content,
-            modelName: modelName
-        },
-    });
-
-    // Analyze
-    let analysis;
-    if (scoringMode === 'ALGO') {
-        analysis = this.scoringService.calculateScore(content, topic);
-    } else {
-        analysis = await this.analyzeTurn(topic, lastTurnContent, content);
+        // We return the stream + metadata needed to save the turn later
+        return {
+            stream,
+            debateId: debate.id,
+            speaker: nextSpeaker,
+            topic: debate.topic,
+            lastTurnContent: lastTurn.content,
+            scoringMode,
+            modelName: activeModel // Pass the chosen model name
+        };
     }
 
-    // Update Turn
-    await this.prisma.debateTurn.update({
-        where: { id: newTurn.id },
-        data: { analysis },
-    });
+    async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string) {
+        // Create Turn
+        const newTurn = await this.prisma.debateTurn.create({
+            data: {
+                debateId,
+                speaker,
+                content,
+                modelName: modelName
+            },
+        });
 
-    return newTurn;
-}
+        // Analyze
+        let analysis;
+        if (scoringMode === 'ALGO') {
+            analysis = this.scoringService.calculateScore(content, topic);
+        } else {
+            analysis = await this.analyzeTurn(topic, lastTurnContent, content);
+        }
+
+        // Update Turn
+        await this.prisma.debateTurn.update({
+            where: { id: newTurn.id },
+            data: { analysis },
+        });
+
+        await this.cacheManager.del(`debate:${debateId}`);
+        await this.cacheManager.del('debates:all');
+
+        return newTurn;
+    }
 
     async startDebate(topic: string) {
-    // Create the debate
-    const debate = await this.prisma.debate.create({
-        data: {
-            topic,
-            status: DebateStatus.ACTIVE,
-        },
-    });
+        // Create the debate
+        const debate = await this.prisma.debate.create({
+            data: {
+                topic,
+                status: DebateStatus.ACTIVE,
+            },
+        });
 
-    // Initialize with an opening statement from Model A
-    const context = await this.ragService.searchSimilar(topic);
-    const contextText = context.map(c => c.content).join('\n');
+        // Initialize with an opening statement from Model A
+        const context = await this.ragService.searchSimilar(topic);
+        const contextText = context.map(c => c.content).join('\n');
 
-    const prompt = `
+        const prompt = `
         You are participating in a debate on the topic: "${topic}".
         You are Speaker A (The Proponent). 
         
@@ -165,52 +167,52 @@ export class DebateService {
         Please provide your opening argument supporting the topic. Keep it concise (under 3 sentences).
         `;
 
-    const response = await this.llmService.generateResponse(prompt);
+        const response = await this.llmService.generateResponse(prompt);
 
-    await this.prisma.debateTurn.create({
-        data: {
-            debateId: debate.id,
-            speaker: Speaker.MODEL_A,
-            content: response,
-            modelName: 'llama3.2'
-        },
-    });
-
-    await this.cacheManager.del('debates:all'); // Invalidate list
-    await this.cacheManager.del('debates:all'); // Invalidate list
-    return debate;
-}
-
-    async processTurn(debateId: string, scoringMode: 'AI' | 'ALGO' = 'AI') {
-    const debate = await this.prisma.debate.findUnique({
-        where: { id: debateId },
-        include: { turns: { orderBy: { timestamp: 'asc' } } },
-    });
-
-    if (!debate) throw new NotFoundException('Debate not found');
-    if (debate.status === DebateStatus.FINISHED) return debate;
-
-    if (debate.turns.length >= 6) {
-        return this.prisma.debate.update({
-            where: { id: debateId },
-            data: { status: DebateStatus.FINISHED },
-            include: { turns: true },
+        await this.prisma.debateTurn.create({
+            data: {
+                debateId: debate.id,
+                speaker: Speaker.MODEL_A,
+                content: response,
+                modelName: 'llama3.2'
+            },
         });
+
+        await this.cacheManager.del('debates:all'); // Invalidate list
+        await this.cacheManager.del('debates:all'); // Invalidate list
+        return debate;
     }
 
-    const lastTurn = debate.turns[debate.turns.length - 1];
-    const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
-    const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
+    async processTurn(debateId: string, scoringMode: 'AI' | 'ALGO' = 'AI') {
+        const debate = await this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: { orderBy: { timestamp: 'asc' } } },
+        });
 
-    // Multi-model for non-streaming
-    const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
+        if (!debate) throw new NotFoundException('Debate not found');
+        if (debate.status === DebateStatus.FINISHED) return debate;
 
-    // 1. Retrieve relevant context (RAG)
-    const context = await this.ragService.searchSimilar(lastTurn.content);
-    const contextText = context.map((d) => d.content).join('\n');
+        if (debate.turns.length >= 6) {
+            return this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED },
+                include: { turns: true },
+            });
+        }
 
-    // 2. Generate Response
-    const prompt = `
+        const lastTurn = debate.turns[debate.turns.length - 1];
+        const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
+        const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'The Proponent' : 'The Opponent';
+
+        // Multi-model for non-streaming
+        const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
+
+        // 1. Retrieve relevant context (RAG)
+        const context = await this.ragService.searchSimilar(lastTurn.content);
+        const contextText = context.map((d) => d.content).join('\n');
+
+        // 2. Generate Response
+        const prompt = `
         You are participating in a debate on the topic: "${debate.topic}".
         You are ${nextSpeaker} (${roleDescription}). 
         
@@ -226,44 +228,44 @@ export class DebateService {
         - CRITICAL: Keep response UNDER 100 WORDS.
         `;
 
-    const responseContent = await this.llmService.generateResponse(prompt, activeModel);
+        const responseContent = await this.llmService.generateResponse(prompt, activeModel);
 
-    // 3. Create Turn WITHOUT analysis first
-    const newTurn = await this.prisma.debateTurn.create({
-        data: {
-            debateId: debate.id,
-            speaker: nextSpeaker,
-            content: responseContent,
-            modelName: activeModel
-        },
-    });
+        // 3. Create Turn WITHOUT analysis first
+        const newTurn = await this.prisma.debateTurn.create({
+            data: {
+                debateId: debate.id,
+                speaker: nextSpeaker,
+                content: responseContent,
+                modelName: activeModel
+            },
+        });
 
-    // 4. Analyze Turn (Hybrid)
-    let analysis;
-    if (scoringMode === 'ALGO') {
-        analysis = this.scoringService.calculateScore(responseContent, debate.topic);
-    } else {
-        // We analyze the NEW turn in context of the debate
-        analysis = await this.analyzeTurn(debate.topic, lastTurn.content, responseContent);
+        // 4. Analyze Turn (Hybrid)
+        let analysis;
+        if (scoringMode === 'ALGO') {
+            analysis = this.scoringService.calculateScore(responseContent, debate.topic);
+        } else {
+            // We analyze the NEW turn in context of the debate
+            analysis = await this.analyzeTurn(debate.topic, lastTurn.content, responseContent);
+        }
+
+        // 5. Update Turn with Analysis
+        await this.prisma.debateTurn.update({
+            where: { id: newTurn.id },
+            data: { analysis },
+        });
+
+        await this.cacheManager.del(`debate:${debateId}`);
+        await this.cacheManager.del('debates:all');
+
+        return this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: { orderBy: { timestamp: 'asc' } } },
+        });
     }
 
-    // 5. Update Turn with Analysis
-    await this.prisma.debateTurn.update({
-        where: { id: newTurn.id },
-        data: { analysis },
-    });
-
-    await this.cacheManager.del(`debate:${debateId}`);
-    await this.cacheManager.del('debates:all');
-
-    return this.prisma.debate.findUnique({
-        where: { id: debateId },
-        include: { turns: { orderBy: { timestamp: 'asc' } } },
-    });
-}
-
-    private async analyzeTurn(topic: string, opponentArg: string, response: string): Promise < any > {
-    const prompt = `
+    private async analyzeTurn(topic: string, opponentArg: string, response: string): Promise<any> {
+        const prompt = `
         Act as an impartial debate judge. Analyze the following exchange:
         Topic: "${topic}"
         Opponent Argument: "${opponentArg}"
@@ -283,15 +285,15 @@ export class DebateService {
         }
         `;
 
-    try {
-        const jsonStr = await this.llmService.generateResponse(prompt, 'llama3.2');
-        // Clean up markdown code blocks if present
-        const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleanJson);
-    } catch(e) {
-        console.error('Analysis failed', e);
-        return { persuasiveness: 50, rebuttal_score: 50, question_score: 50, key_point: "Analysis unavailable" };
+        try {
+            const jsonStr = await this.llmService.generateResponse(prompt, 'llama3.2');
+            // Clean up markdown code blocks if present
+            const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+            return JSON.parse(cleanJson);
+        } catch (e) {
+            console.error('Analysis failed', e);
+            return { persuasiveness: 50, rebuttal_score: 50, question_score: 50, key_point: "Analysis unavailable" };
+        }
     }
-}
 
 }
