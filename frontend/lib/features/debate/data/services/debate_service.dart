@@ -1,19 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
+
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../../core/config/api_config.dart';
 import '../../../../core/data/settings_manager.dart';
 import '../models/debate.dart';
 
 class DebateService {
   final _storage = const FlutterSecureStorage();
 
-  String get baseUrl {
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:3000';
-    }
-    return 'http://localhost:3000';
-  }
+  String get baseUrl => ApiConfig.baseUrl;
 
   Future<Debate> startDebate(String topic) async {
     final token = await _storage.read(key: 'jwt_token');

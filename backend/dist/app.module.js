@@ -17,12 +17,22 @@ const prisma_module_1 = require("./prisma/prisma.module");
 const llm_module_1 = require("./llm/llm.module");
 const rag_module_1 = require("./rag/rag.module");
 const debate_module_1 = require("./debate/debate.module");
+const cache_manager_1 = require("@nestjs/cache-manager");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
-        imports: [config_1.ConfigModule.forRoot({ isGlobal: true }), users_module_1.UsersModule, auth_module_1.AuthModule, prisma_module_1.PrismaModule, llm_module_1.LlmModule, rag_module_1.RagModule, debate_module_1.DebateModule],
+        imports: [
+            config_1.ConfigModule.forRoot({ isGlobal: true }),
+            cache_manager_1.CacheModule.register({ isGlobal: true }),
+            users_module_1.UsersModule,
+            auth_module_1.AuthModule,
+            prisma_module_1.PrismaModule,
+            llm_module_1.LlmModule,
+            rag_module_1.RagModule,
+            debate_module_1.DebateModule,
+        ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
     })

@@ -8,9 +8,19 @@ import { PrismaModule } from './prisma/prisma.module';
 import { LlmModule } from './llm/llm.module';
 import { RagModule } from './rag/rag.module';
 import { DebateModule } from './debate/debate.module';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), UsersModule, AuthModule, PrismaModule, LlmModule, RagModule, DebateModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    CacheModule.register({ isGlobal: true }),
+    UsersModule,
+    AuthModule,
+    PrismaModule,
+    LlmModule,
+    RagModule,
+    DebateModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
