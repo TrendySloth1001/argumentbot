@@ -3,6 +3,7 @@ import '../../data/services/auth_service.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/primary_button.dart';
 import 'register_screen.dart';
+import '../../../../features/home/presentation/screens/main_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.login(email, password);
+      final user = await _authService.login(email, password);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -41,7 +42,10 @@ class _LoginScreenState extends State<LoginScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        // Navigate to dashboard/home in future task
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => MainScreen(user: user)),
+        );
       }
     } catch (e) {
       if (mounted) {

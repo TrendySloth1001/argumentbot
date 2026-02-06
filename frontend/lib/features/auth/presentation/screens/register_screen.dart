@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../data/services/auth_service.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/primary_button.dart';
+import '../../../../features/home/presentation/screens/main_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -31,7 +32,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.register(email, password);
+      final user = await _authService.register(email, password);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -40,9 +41,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        // Navigate to home or login (Reset for now)
-        _emailController.clear();
-        _passwordController.clear();
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => MainScreen(user: user)),
+        );
       }
     } catch (e) {
       if (mounted) {
