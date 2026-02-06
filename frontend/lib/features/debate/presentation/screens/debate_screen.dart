@@ -241,10 +241,7 @@ class _DebateScreenState extends State<DebateScreen> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: SizedBox(
-                  height: 8,
-                  child: PowerBar(scoreA: scoreA, scoreB: scoreB),
-                ),
+                child: PowerBar(scoreA: scoreA, scoreB: scoreB),
               ),
               const SizedBox(width: 8),
               const Text(
