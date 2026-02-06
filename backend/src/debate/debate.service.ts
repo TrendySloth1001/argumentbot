@@ -45,7 +45,25 @@ export class DebateService {
             }
         });
 
-        await this.cacheManager.set(cacheKey, debates, 600000); // 10 mins
+        await this.cacheManager.set(cacheKey, debates, 600000);
+        return debates;
+    }
+
+    // Get debates for a specific user only
+    async getDebatesByUser(userId: string) {
+        const cacheKey = `debates:user:${userId}`;
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) return cached;
+
+        const debates = await this.prisma.debate.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                turns: { take: 1, orderBy: { timestamp: 'desc' } }
+            }
+        });
+
+        await this.cacheManager.set(cacheKey, debates, 600000);
         return debates;
     }
 
@@ -144,12 +162,13 @@ export class DebateService {
         return newTurn;
     }
 
-    async startDebate(topic: string) {
+    async startDebate(topic: string, userId?: string) {
         // Create the debate
         const debate = await this.prisma.debate.create({
             data: {
                 topic,
                 status: DebateStatus.ACTIVE,
+                userId: userId || null,
             },
         });
 

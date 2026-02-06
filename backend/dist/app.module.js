@@ -17,6 +17,7 @@ const prisma_module_1 = require("./prisma/prisma.module");
 const llm_module_1 = require("./llm/llm.module");
 const rag_module_1 = require("./rag/rag.module");
 const debate_module_1 = require("./debate/debate.module");
+const feed_module_1 = require("./feed/feed.module");
 const cache_manager_1 = require("@nestjs/cache-manager");
 let AppModule = class AppModule {
 };
@@ -32,6 +33,7 @@ exports.AppModule = AppModule = __decorate([
             llm_module_1.LlmModule,
             rag_module_1.RagModule,
             debate_module_1.DebateModule,
+            feed_module_1.FeedModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

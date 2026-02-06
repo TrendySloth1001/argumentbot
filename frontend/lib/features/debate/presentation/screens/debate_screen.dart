@@ -3,6 +3,7 @@ import '../../data/models/debate.dart';
 import '../../data/services/debate_service.dart';
 import '../widgets/power_bar.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import '../../../feed/presentation/widgets/share_debate_dialog.dart';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -176,6 +177,16 @@ class _DebateScreenState extends State<DebateScreen> {
               icon: Icon(Icons.refresh, color: Colors.grey[400]),
               onPressed: _loadDebate,
             ),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.blueAccent),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) =>
+                    ShareDebateDialog(debateId: widget.debateId),
+              );
+            },
+          ),
         ],
       ),
       body: Column(

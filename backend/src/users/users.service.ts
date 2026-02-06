@@ -34,4 +34,15 @@ export class UsersService {
 
         return user;
     }
+    async update(userId: string, data: Prisma.UserUpdateInput): Promise<User> {
+        const user = await this.prisma.user.update({
+            where: { id: userId },
+            data,
+        });
+
+        // Invalidate cache
+        await this.cacheManager.del(`user:${user.email}`);
+
+        return user;
+    }
 }

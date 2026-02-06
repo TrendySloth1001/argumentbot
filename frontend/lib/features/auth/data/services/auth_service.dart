@@ -10,6 +10,10 @@ class AuthService {
 
   static String get baseUrl => ApiConfig.baseUrl;
 
+  Future<String?> getToken() async {
+    return await _storage.read(key: 'jwt_token');
+  }
+
   Future<User?> checkAuth() async {
     if (kDebugMode) {
       print('AuthService: checkAuth started');
@@ -112,6 +116,27 @@ class AuthService {
       }
     } catch (e) {
       throw Exception('Connection error: $e');
+    }
+  }
+
+  Future<User> updateProfile(String avatarUrl) async {
+    final token = await getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final url = Uri.parse('$baseUrl/users/profile');
+    final response = await http.patch(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'avatarUrl': avatarUrl}),
+    );
+
+    if (response.statusCode == 200) {
+      return User.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to update profile');
     }
   }
 }

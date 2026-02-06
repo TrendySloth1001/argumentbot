@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { LlmModule } from './llm/llm.module';
 import { RagModule } from './rag/rag.module';
 import { DebateModule } from './debate/debate.module';
+import { FeedModule } from './feed/feed.module';
 import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
@@ -20,6 +21,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     LlmModule,
     RagModule,
     DebateModule,
+    FeedModule,
   ],
   controllers: [AppController],
   providers: [AppService],

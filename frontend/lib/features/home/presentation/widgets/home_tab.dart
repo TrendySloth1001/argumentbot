@@ -64,15 +64,20 @@ class _HomeTabState extends State<HomeTab> {
         CircleAvatar(
           radius: 25,
           backgroundColor: Colors.grey[800],
-          child: Text(
-            widget.user.username.isNotEmpty
-                ? widget.user.username[0].toUpperCase()
-                : 'U',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          backgroundImage: widget.user.avatarUrl != null
+              ? NetworkImage(widget.user.avatarUrl!)
+              : null,
+          child: widget.user.avatarUrl == null
+              ? Text(
+                  widget.user.username.isNotEmpty
+                      ? widget.user.username[0].toUpperCase()
+                      : 'U',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              : null,
         ),
         const SizedBox(width: 15),
         Column(

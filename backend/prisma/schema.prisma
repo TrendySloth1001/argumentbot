@@ -9,13 +9,18 @@ datasource db {
   extensions = [vector]
 }
 
+
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  username     String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
   passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  avatarUrl    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  posts        Post[]
+  comments     Comment[]
+  likes        Like[]
 }
 
 model Document {
@@ -23,19 +28,21 @@ model Document {
   content   String
   embedding Unsupported("vector")?
   createdAt DateTime               @default(now())
-
 }
 
 model Debate {
   id        String       @id @default(uuid())
   topic     String
   status    DebateStatus @default(ACTIVE)
+  userId    String?      // Owner of debate (null for legacy)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   turns     DebateTurn[]
+  posts     Post[]
 
   @@index([status])
   @@index([updatedAt])
+  @@index([userId])
 }
 
 model DebateTurn {
@@ -50,6 +57,54 @@ model DebateTurn {
 
   @@index([debateId])
   @@index([timestamp])
+}
+
+model Post {
+  id           String    @id @default(uuid())
+  title        String
+  description  String?
+  authorId     String
+  debateId     String
+  likeCount    Int       @default(0)
+  commentCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  author       User      @relation(fields: [authorId], references: [id])
+  debate       Debate    @relation(fields: [debateId], references: [id])
+  comments     Comment[]
+  likes        Like[]
+
+  @@index([createdAt]) // For feed sorting
+  @@index([authorId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  authorId  String
+  postId    String
+  parentId  String?  // For nested replies
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author    User      @relation(fields: [authorId], references: [id])
+  post      Post      @relation(fields: [postId], references: [id])
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+}
+
+model Like {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+
+  @@id([userId, postId]) // Prevent duplicate likes
 }
 
 enum DebateStatus {

@@ -1,14 +1,16 @@
-import { Controller, Post, Body, Get, Param, Put, Res, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Res, Query, UseGuards, Req } from '@nestjs/common';
 import type { Response } from 'express';
 import { DebateService } from './debate.service';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('debate')
 export class DebateController {
     constructor(private readonly debateService: DebateService) { }
 
+    @UseGuards(AuthGuard('jwt'))
     @Post('start')
-    async startDebate(@Body('topic') topic: string) {
-        return this.debateService.startDebate(topic);
+    async startDebate(@Body('topic') topic: string, @Req() req) {
+        return this.debateService.startDebate(topic, req.user.userId);
     }
 
     @Post(':id/next')
@@ -21,7 +23,7 @@ export class DebateController {
         const { stream, debateId, speaker, topic, lastTurnContent, modelName } = await this.debateService.processTurnStream(id, scoringMode);
 
         if (!stream) {
-            res.end(); // Debate finished or error
+            res.end();
             return;
         }
 
@@ -38,8 +40,6 @@ export class DebateController {
                 if (done) break;
 
                 const chunk = new TextDecoder().decode(value);
-                // Parse Ollama JSON chunk
-                // Ollama sends multiples JSON objects in one chunk sometimes
                 const lines = chunk.split('\n').filter(line => line.trim() !== '');
 
                 for (const line of lines) {
@@ -51,7 +51,6 @@ export class DebateController {
                             res.write(`data: ${JSON.stringify({ content, speaker })}\n\n`);
                         }
                         if (json.done) {
-                            // Save to DB when done
                             if (debateId && speaker && topic && lastTurnContent && modelName) {
                                 await this.debateService.saveTurn(debateId, speaker, fullContent, scoringMode, topic, lastTurnContent, modelName);
                             }
@@ -74,8 +73,10 @@ export class DebateController {
         return this.debateService.getDebate(id);
     }
 
+    // Get debates for current user only
+    @UseGuards(AuthGuard('jwt'))
     @Get()
-    async getAllDebates() {
-        return this.debateService.getAllDebates();
+    async getAllDebates(@Req() req) {
+        return this.debateService.getDebatesByUser(req.user.userId);
     }
 }

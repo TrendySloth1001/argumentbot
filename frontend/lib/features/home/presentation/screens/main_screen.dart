@@ -3,9 +3,9 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:line_icons/line_icons.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
-import '../../../chat/presentation/screens/chat_screen.dart';
+import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
-import '../widgets/home_tab.dart'; // Ensure this exists
+import '../widgets/home_tab.dart';
 
 class MainScreen extends StatefulWidget {
   final User user;
@@ -18,25 +18,39 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-
-  late final List<Widget> _screens;
+  late User _currentUser;
 
   @override
   void initState() {
     super.initState();
-    _screens = [
-      HomeTab(user: widget.user),
-      const ChatScreen(),
-      ProfileScreen(user: widget.user),
-      const SettingsScreen(),
-    ];
+    _currentUser = widget.user;
+  }
+
+  void _onAvatarUpdated(String avatarUrl) {
+    setState(() {
+      _currentUser = User(
+        id: _currentUser.id,
+        email: _currentUser.email,
+        username: _currentUser.username,
+        createdAt: _currentUser.createdAt,
+        avatarUrl: avatarUrl,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Build screens dynamically so they get the updated user
+    final screens = [
+      HomeTab(user: _currentUser),
+      const FeedScreen(),
+      ProfileScreen(user: _currentUser, onAvatarUpdated: _onAvatarUpdated),
+      const SettingsScreen(),
+    ];
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: _screens[_selectedIndex],
+      body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.black,
@@ -59,7 +73,7 @@ class _MainScreenState extends State<MainScreen> {
               color: Colors.grey[400],
               tabs: const [
                 GButton(icon: LineIcons.home, text: 'Home'),
-                GButton(icon: LineIcons.comments, text: 'Chat'),
+                GButton(icon: LineIcons.globe, text: 'Feed'),
                 GButton(icon: LineIcons.user, text: 'Profile'),
                 GButton(icon: LineIcons.cog, text: 'Settings'),
               ],
