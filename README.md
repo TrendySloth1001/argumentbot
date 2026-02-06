@@ -1,4 +1,4 @@
-# ArgumentBot
+# MrArgue
 
 **AI Debate Simulator** - A real-time adversarial debate system where two Large Language Models argue opposing positions on any topic, scored by an impartial AI judge.
 
@@ -6,12 +6,21 @@
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
 [![Flutter](https://img.shields.io/badge/Flutter-3.10+-blue.svg)](https://flutter.dev/)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20LLMs-purple.svg)](https://ollama.ai/)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen.svg)](https://github.com/TrendySloth1001/argumentbot/releases)
+
+---
+
+## Screenshots
+
+| Home | Debate | History |
+|:----:|:------:|:-------:|
+| ![Home](screenshots/home.png) | ![Debate](screenshots/debate.jpg) | ![History](screenshots/history.png) |
 
 ---
 
 ## Overview
 
-ArgumentBot pits two locally-hosted LLMs against each other in structured debates. Each model is constrained by strict rules that force adversarial reasoning: explicit claims, direct rebuttals, and pointed counter-questions. An AI judge scores each turn based on claim quality, directness, and attack strength.
+MrArgue pits two locally-hosted LLMs against each other in structured debates. Each model is constrained by strict rules that force adversarial reasoning: explicit claims, direct rebuttals, and pointed counter-questions. An AI judge scores each turn based on claim quality, directness, and attack strength.
 
 ### Key Differentiators
 
@@ -19,6 +28,7 @@ ArgumentBot pits two locally-hosted LLMs against each other in structured debate
 - **Adversarial by design**: Prompts enforce falsifiable claims and penalize vague abstractions
 - **RAG-enhanced**: Retrieval-augmented generation provides factual context
 - **Dual scoring modes**: AI judge or algorithmic heuristics
+- **Entertainment value**: AI models roast each other with witty comebacks
 
 ---
 
