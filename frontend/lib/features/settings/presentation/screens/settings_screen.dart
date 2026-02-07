@@ -41,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _previewingVoice;
   String? _errorMessage;
   bool _isAudioCacheEnabled = true;
+  bool _isKaraokeEnabled = true;
   String _cacheSize = '0 KB';
 
   // Theme colors
@@ -67,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final oppVoice = await VoiceSettings.getOpponentVoice();
     final cacheEnabled = await VoiceSettings.getAudioCacheEnabled();
 
+    final karaokeEnabled = await VoiceSettings.getKaraokeEnabled();
+
     await _updateCacheSize();
 
     setState(() {
@@ -74,6 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _proponentVoice = proVoice;
       _opponentVoice = oppVoice;
       _isAudioCacheEnabled = cacheEnabled;
+      _isKaraokeEnabled = karaokeEnabled;
       _isLoading = false;
     });
   }
@@ -97,6 +101,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!value) {
       // Optional: Clear cache when disabling? No, let user decide.
     }
+  }
+
+  Future<void> _toggleKaraoke(bool value) async {
+    await VoiceSettings.setKaraokeEnabled(value);
+    setState(() => _isKaraokeEnabled = value);
   }
 
   Future<void> _clearAudioCache() async {
@@ -587,6 +596,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ],
+
+          const SizedBox(height: 16),
+          // Karaoke Toggle
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Karaoke Mode',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Highlight text as it is spoken',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _isKaraokeEnabled,
+                onChanged: _toggleKaraoke,
+                activeColor: neonGreen,
+                activeTrackColor: neonGreen.withAlpha(50),
+                inactiveThumbColor: Colors.grey[400],
+                inactiveTrackColor: Colors.grey[800],
+              ),
+            ],
+          ),
 
           if (_errorMessage != null || _availableVoices.isEmpty)
             Padding(

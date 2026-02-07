@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { StorageService } from '../storage/storage.service';
+import { Readable } from 'stream';
 
 export interface Voice {
     id: string;
@@ -99,6 +100,23 @@ export class TtsService {
                 );
             }
             throw new HttpException('TTS service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    async synthesizeStream(text: string, voice?: string): Promise<Readable> {
+        try {
+            console.log(`[TTS Service] Requesting stream for: ${text.substring(0, 20)}...`);
+            const start = Date.now();
+            const response = await this.httpService.axiosRef.post(
+                `${this.ttsServiceUrl}/synthesize_stream`,
+                { text, voice },
+                { responseType: 'stream' }
+            );
+            console.log(`[TTS Service] Stream connected in ${Date.now() - start}ms`);
+            return response.data;
+        } catch (error) {
+            console.error('Streaming TTS failed:', error.message);
+            throw new HttpException('TTS streaming unavailable', HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 

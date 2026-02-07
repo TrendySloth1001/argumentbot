@@ -1,9 +1,6 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../data/models/debate.dart';
 import '../../../../core/services/tts_service.dart';
 
@@ -43,33 +40,54 @@ class _DebateTurnItemState extends State<DebateTurnItem> {
     setState(() => _isLoading = true);
 
     try {
-      // Get audio from TTS service
-      final Uint8List audioBytes = await _ttsService.synthesize(
-        widget.turn.content,
+      // Split text into sentences for better sync and buffering
+      // Identify sentence boundaries: . ! ? followed by space or end of string
+      final sentences = widget.turn.content
+          .split(RegExp(r'(?<=[.!?])\s+'))
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+
+      if (sentences.isEmpty) {
+        sentences.add(widget.turn.content);
+      }
+
+      // Get token for headers if needed (not supported directly in URI, may need custom source for headers)
+      // Note: TtsService.getStreamUrl returns a URL with token param if needed, or we rely on cookie/public access?
+      // Step 4272 viewer of tts_service showed it returns a full URL.
+      // Assuming URL is accessible or token is in query param.
+      // If token is Header-only, ConcatenatingAudioSource might fail without headers?
+      // just_audio supports headers in AudioSource.uri(uri, headers: ...).
+
+      final token = await _ttsService.getToken();
+      final headers = token != null ? {'Authorization': 'Bearer $token'} : null;
+
+      final source = ConcatenatingAudioSource(
+        children: sentences.map((sentence) {
+          final url = _ttsService.getStreamUrl(
+            sentence,
+            voice: widget.isModelA ? 'en_US-amy-medium' : 'en_US-ryan-high',
+          );
+          return AudioSource.uri(
+            Uri.parse(url),
+            headers: headers,
+            tag: sentence,
+          );
+        }).toList(),
       );
 
-      // Save to temp file (just_audio needs a file or URL)
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        '${tempDir.path}/tts_${widget.turn.id}_${DateTime.now().millisecondsSinceEpoch}.wav',
-      );
-      await tempFile.writeAsBytes(audioBytes);
-
-      // Play audio
-      await _audioPlayer.setFilePath(tempFile.path);
+      await _audioPlayer.setAudioSource(source);
 
       setState(() {
         _isLoading = false;
         _isPlaying = true;
       });
 
+      // Update UI on completion
       _audioPlayer.playerStateStream.listen((state) {
         if (state.processingState == ProcessingState.completed) {
           if (mounted) {
             setState(() => _isPlaying = false);
           }
-          // Clean up temp file
-          tempFile.delete().catchError((_) => tempFile);
         }
       });
 

@@ -59,6 +59,17 @@ class TtsService {
     }
   }
 
+  /// Get streaming URL for low-latency playback
+  String getStreamUrl(String text, {String? voice}) {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tts/synthesize/stream').replace(
+      queryParameters: {'text': text, if (voice != null) 'voice': voice},
+    );
+    return uri.toString();
+  }
+
+  /// Get auth token
+  Future<String?> getToken() => _authService.getToken();
+
   /// Generate cache file path based on MD5 hash of content
   Future<File> _getCacheFile(String text, String? voice) async {
     final dir = await getApplicationDocumentsDirectory();

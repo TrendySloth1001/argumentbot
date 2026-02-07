@@ -74,4 +74,16 @@ class VoiceSettings {
     final prefs = await SharedPreferences.getInstance();
     return prefs.setBool('audio_cache_enabled', enabled);
   }
+
+  /// Get karaoke mode preference (default: true)
+  static Future<bool> getKaraokeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('karaoke_enabled') ?? true;
+  }
+
+  /// Set karaoke mode preference
+  static Future<bool> setKaraokeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.setBool('karaoke_enabled', enabled);
+  }
 }

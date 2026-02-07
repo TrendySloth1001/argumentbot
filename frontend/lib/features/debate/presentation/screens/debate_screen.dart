@@ -1,9 +1,6 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../data/models/debate.dart';
 import '../../data/services/debate_service.dart';
 import '../widgets/power_bar.dart';
@@ -25,7 +22,7 @@ class DebateScreen extends StatefulWidget {
 class _DebateScreenState extends State<DebateScreen> {
   final _debateService = DebateService();
   final _ttsService = TtsService();
-  final Map<String, AudioPlayer> _audioPlayers = {};
+
   Debate? _debate;
   bool _isLoading = true;
   bool _isProcessingTurn = false;
@@ -35,15 +32,28 @@ class _DebateScreenState extends State<DebateScreen> {
   // TTS state per turn
   final Map<String, bool> _playingTurns = {};
   final Map<String, bool> _loadingTurns = {};
+  final Map<String, AudioPlayer> _audioPlayers = {};
+  final Map<String, List<String>> _turnSentences = {};
+  final Map<String, int> _turnCurrentIndices = {};
 
   static const Color neonGreen = Color(0xFF00FF88);
   static const Color neonPurple = Color(0xFF8E2DE2);
   static const Color neonBlue = Color(0xFF00B4DB);
 
+  bool _isKaraokeEnabled = true;
+
   @override
   void initState() {
     super.initState();
+    _loadVoiceSettings();
     _loadDebate();
+  }
+
+  Future<void> _loadVoiceSettings() async {
+    final karaoke = await VoiceSettings.getKaraokeEnabled();
+    if (mounted) {
+      setState(() => _isKaraokeEnabled = karaoke);
+    }
   }
 
   @override
@@ -81,64 +91,113 @@ class _DebateScreenState extends State<DebateScreen> {
         .trim();
   }
 
-  Future<void> _playTurnAudio(
-    String turnId,
-    String content, {
-    bool isModelA = true,
-  }) async {
-    if (_loadingTurns[turnId] == true) return;
+  void _stopAllAudio() {
+    for (final player in _audioPlayers.values) {
+      player.stop();
+    }
+    setState(() {
+      _playingTurns.updateAll((key, value) => false);
+      _loadingTurns.updateAll((key, value) => false);
+      _turnCurrentIndices.updateAll((key, value) => 0);
+    });
+  }
 
-    // If already playing, stop
-    if (_playingTurns[turnId] == true) {
-      await _audioPlayers[turnId]?.stop();
-      setState(() => _playingTurns[turnId] = false);
-      return;
+  Future<void> _playTurnAudio(DebateTurn turn, {bool isModelA = true}) async {
+    // Initialize player if needed
+    if (!_audioPlayers.containsKey(turn.id)) {
+      _audioPlayers[turn.id] = AudioPlayer();
     }
 
-    setState(() => _loadingTurns[turnId] = true);
+    final player = _audioPlayers[turn.id]!;
+
+    // Listen for completion to update UI
+    player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        if (mounted) {
+          setState(() {
+            _playingTurns[turn.id] = false;
+            _turnCurrentIndices[turn.id] = 0;
+          });
+        }
+      }
+    });
+
+    // Listen for current sentence index
+    player.currentIndexStream.listen((index) {
+      if (mounted && index != null) {
+        setState(() {
+          _turnCurrentIndices[turn.id] = index;
+        });
+      }
+    });
 
     try {
-      // Get the appropriate voice based on speaker
-      final voice = isModelA
-          ? await VoiceSettings.getProponentVoice()
-          : await VoiceSettings.getOpponentVoice();
+      if (_playingTurns[turn.id] == true) {
+        await player.stop();
+        setState(() {
+          _playingTurns[turn.id] = false;
+        });
+      } else {
+        // Stop other players
+        _stopAllAudio();
 
-      // Strip markdown before TTS
-      final cleanContent = _stripMarkdown(content);
-      final Uint8List audioBytes = await _ttsService.synthesize(
-        cleanContent,
-        voice: voice,
-      );
+        setState(() {
+          _playingTurns[turn.id] = true;
+          _loadingTurns[turn.id] = true;
+          _turnCurrentIndices[turn.id] = 0;
+        });
 
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        '${tempDir.path}/tts_${turnId}_${DateTime.now().millisecondsSinceEpoch}.wav',
-      );
-      await tempFile.writeAsBytes(audioBytes);
+        // Strip markdown before TTS
+        final cleanContent = _stripMarkdown(turn.content);
 
-      _audioPlayers[turnId] ??= AudioPlayer();
-      await _audioPlayers[turnId]!.setFilePath(tempFile.path);
+        // Split text into sentences
+        final sentences = cleanContent
+            .split(RegExp(r'(?<=[.!?])\s+'))
+            .where((s) => s.trim().isNotEmpty)
+            .toList();
 
-      setState(() {
-        _loadingTurns[turnId] = false;
-        _playingTurns[turnId] = true;
-      });
+        if (sentences.isEmpty) sentences.add(cleanContent);
+        _turnSentences[turn.id] = sentences;
 
-      _audioPlayers[turnId]!.playerStateStream.listen((state) {
-        if (state.processingState == ProcessingState.completed) {
-          if (mounted) {
-            setState(() => _playingTurns[turnId] = false);
-          }
-          tempFile.delete().catchError((_) => tempFile);
-        }
-      });
+        // Get the appropriate voice based on speaker
+        final voice = isModelA
+            ? await VoiceSettings.getProponentVoice()
+            : await VoiceSettings.getOpponentVoice();
 
-      await _audioPlayers[turnId]!.play();
+        // Get token
+        final token = await _ttsService.getToken();
+        final headers = token != null
+            ? {'Authorization': 'Bearer $token'}
+            : null;
+
+        // Create Playlist
+        final audioSources = sentences.map((sentence) {
+          final url = _ttsService.getStreamUrl(sentence, voice: voice);
+          return AudioSource.uri(
+            Uri.parse(url),
+            headers: headers,
+            tag: sentence,
+          );
+        }).toList();
+
+        await player.setAudioSources(audioSources);
+        await player.play();
+
+        setState(() {
+          _loadingTurns[turn.id] = false;
+        });
+      }
     } catch (e) {
-      setState(() => _loadingTurns[turnId] = false);
+      setState(() {
+        _playingTurns[turn.id] = false;
+        _loadingTurns[turn.id] = false;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('TTS Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Audio Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -482,8 +541,7 @@ class _DebateScreenState extends State<DebateScreen> {
               const SizedBox(width: 8),
               // Speaker Button
               GestureDetector(
-                onTap: () =>
-                    _playTurnAudio(turn.id, turn.content, isModelA: isModelA),
+                onTap: () => _playTurnAudio(turn, isModelA: isModelA),
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
@@ -522,33 +580,73 @@ class _DebateScreenState extends State<DebateScreen> {
           const SizedBox(height: 12),
 
           // Content
-          if (_playingTurns[turn.id] == true) ...[
-            KaraokeText(
-              text: turn.content,
-              audioPlayer: _audioPlayers[turn.id],
-              isPlaying: true,
-            ),
-            const SizedBox(height: 12),
-            // Sound Bar (Symmetric Waveform)
-            StreamBuilder<Duration>(
-              stream: _audioPlayers[turn.id]?.positionStream,
+          if (_playingTurns[turn.id] == true)
+            StreamBuilder<PlayerState>(
+              stream: _audioPlayers[turn.id]?.playerStateStream,
               builder: (context, snapshot) {
-                final position = snapshot.data ?? Duration.zero;
-                final duration =
-                    _audioPlayers[turn.id]?.duration ?? Duration.zero;
+                final state = snapshot.data;
+                final isBuffering =
+                    state?.processingState == ProcessingState.buffering ||
+                    state?.processingState == ProcessingState.loading;
+                final isReady =
+                    state?.processingState == ProcessingState.ready ||
+                    state?.processingState == ProcessingState.completed;
+                final isActuallyPlaying = (state?.playing ?? false) && isReady;
 
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: AudioWaveform(
-                    isPlaying: true,
-                    position: position,
-                    duration: duration,
-                    color: neonGreen,
-                  ),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _isKaraokeEnabled
+                        ? KaraokeText(
+                            text: turn.content,
+                            audioPlayer: _audioPlayers[turn.id],
+                            isPlaying: isActuallyPlaying,
+                            sentences: _turnSentences[turn.id],
+                            currentIndex: _turnCurrentIndices[turn.id],
+                          )
+                        : Text(
+                            turn.content,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.6,
+                            ),
+                          ),
+                    const SizedBox(height: 12),
+                    // Sound Bar or Loading Indicator
+                    if (isBuffering)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: LinearProgressIndicator(
+                          color: neonGreen.withOpacity(0.5),
+                          backgroundColor: Colors.grey[800],
+                          minHeight: 2,
+                        ),
+                      )
+                    else
+                      StreamBuilder<Duration>(
+                        stream: _audioPlayers[turn.id]?.positionStream,
+                        builder: (context, snapshot) {
+                          final position = snapshot.data ?? Duration.zero;
+                          final duration =
+                              _audioPlayers[turn.id]?.duration ?? Duration.zero;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: AudioWaveform(
+                              isPlaying: isActuallyPlaying,
+                              position: position,
+                              duration: duration,
+                              color: neonGreen,
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 );
               },
-            ),
-          ] else
+            )
+          else
             MarkdownBody(
               data: turn.content,
               styleSheet: MarkdownStyleSheet(

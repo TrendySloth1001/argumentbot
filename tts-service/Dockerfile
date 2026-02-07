@@ -2,14 +2,39 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Python dependencies first
+# Install system dependencies
+RUN apt-get update && apt-get install -u -y \
+    curl \
+    tar \
+    gzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies (FastAPI, Uvicorn)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Remove piper-tts from requirements to avoid conflict/double install
+RUN sed -i '/piper-tts/d' requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Install Piper Binary (Native)
+# Detect architecture and download appropriate binary
+ARG TARGETARCH
+RUN echo "Target Architecture: $TARGETARCH" && \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+    curl -L -o piper.tar.gz "https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_arm64.tar.gz"; \
+    else \
+    curl -L -o piper.tar.gz "https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz"; \
+    fi && \
+    tar -xzf piper.tar.gz && \
+    rm piper.tar.gz && \
+    mv piper /app/piper_bin
+
+# Add piper to PATH
+ENV PATH="/app/piper_bin:$PATH"
 
 # Create voices directory
 RUN mkdir -p /app/voices
 
-# Download multiple high-quality English voice models
+# Download voice models (Keep existing downloads)
 # Amy - US Female (Natural)
 RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx', '/app/voices/en_US-amy-medium.onnx')" && \
     python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json', '/app/voices/en_US-amy-medium.onnx.json')"

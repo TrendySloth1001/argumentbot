@@ -6,12 +6,16 @@ class KaraokeText extends StatefulWidget {
   final String text;
   final AudioPlayer? audioPlayer;
   final bool isPlaying;
+  final List<String>? sentences;
+  final int? currentIndex;
 
   const KaraokeText({
     super.key,
     required this.text,
     this.audioPlayer,
     this.isPlaying = false,
+    this.sentences,
+    this.currentIndex,
   });
 
   @override
@@ -37,6 +41,9 @@ class _KaraokeTextState extends State<KaraokeText> {
     _durationStream?.cancel();
 
     final player = widget.audioPlayer!;
+    // Note: With ConcatenatingAudioSource, duration changes per item.
+    // player.durationStream emits duration of current item.
+
     if (player.duration != null) {
       _totalDuration = player.duration!;
     }
@@ -48,14 +55,26 @@ class _KaraokeTextState extends State<KaraokeText> {
     });
 
     _positionStream = player.positionStream.listen((position) {
-      if (_totalDuration.inMilliseconds > 0) {
-        if (mounted) {
-          setState(() {
+      if (mounted) {
+        setState(() {
+          // If duration is unknown/streaming, rely on word count estimation for specific sentence?
+          // Or just 0..1 if we have duration.
+          // ConcatenatingAudioSource usually provides duration if header is valid.
+          // Our "synthesize" endpoint (non-stream) returns valid WAV with header.
+          // So _totalDuration should be correct.
+
+          if (_totalDuration.inMilliseconds > 0) {
             _progress = position.inMilliseconds / _totalDuration.inMilliseconds;
-            if (_progress > 1.0) _progress = 1.0;
-            if (_progress < 0.0) _progress = 0.0;
-          });
-        }
+          } else {
+            // Fallback if header issues persist (e.g. streaming chunks)
+            // For sentence, we can estimate?
+            // But we moved to "synthesize" which generates valid WAV.
+            _progress = 0.0;
+          }
+
+          if (_progress > 1.0) _progress = 1.0;
+          if (_progress < 0.0) _progress = 0.0;
+        });
       }
     });
   }
@@ -90,20 +109,45 @@ class _KaraokeTextState extends State<KaraokeText> {
   @override
   Widget build(BuildContext context) {
     if (!widget.isPlaying) {
-      // If not playing, render static text (dimmed or full? usually handled by parent)
-      // Parent should swap this widget out if not playing, or we render full active.
-      // But to be safe, render full active.
-      // Actually, standard MarkdownBody is better for static.
-      // But if used, render fully highlighted.
-      return RichText(text: TextSpan(children: _buildSpans(forceActive: true)));
+      return RichText(
+        text: TextSpan(children: _buildSpans(widget.text, forceActive: true)),
+      );
     }
 
-    return RichText(text: TextSpan(children: _buildSpans()));
+    if (widget.sentences != null && widget.currentIndex != null) {
+      final List<TextSpan> allSpans = [];
+      for (int i = 0; i < widget.sentences!.length; i++) {
+        final sentence = widget.sentences![i];
+        if (i < widget.currentIndex!) {
+          // Previous sentences are fully highlighted
+          allSpans.addAll(_buildSpans(sentence, forceActive: true));
+        } else if (i == widget.currentIndex!) {
+          // Current sentence is animated
+          allSpans.addAll(_buildSpans(sentence, progress: _progress));
+        } else {
+          // Future sentences are dimmed
+          allSpans.addAll(_buildSpans(sentence, forceInactive: true));
+        }
+        // Add space between sentences if needed (split removed spacing)
+        allSpans.add(const TextSpan(text: ' '));
+      }
+      return RichText(text: TextSpan(children: allSpans));
+    }
+
+    // Legacy mode (Full text)
+    return RichText(
+      text: TextSpan(children: _buildSpans(widget.text, progress: _progress)),
+    );
   }
 
-  List<TextSpan> _buildSpans({bool forceActive = false}) {
+  List<TextSpan> _buildSpans(
+    String text, {
+    double progress = 1.0,
+    bool forceActive = false,
+    bool forceInactive = false,
+  }) {
     final List<TextSpan> spans = [];
-    final matches = RegExp(r'(\S+|\s+)').allMatches(widget.text);
+    final matches = RegExp(r'(\S+|\s+)').allMatches(text);
 
     int totalNonGaps = 0;
     for (final m in matches) {
@@ -112,7 +156,10 @@ class _KaraokeTextState extends State<KaraokeText> {
 
     int activeWordIndex = forceActive
         ? totalNonGaps
-        : (totalNonGaps * _progress).floor();
+        : (totalNonGaps * progress).floor();
+
+    if (forceInactive) activeWordIndex = -1;
+
     int currentWordCount = 0;
 
     // Styles
