@@ -1,125 +1,408 @@
-# MrArgue - AI Debate Simulator
+# MrArgue
 
-**MrArgue** is an advanced AI-powered debate simulator where users can engage in real-time voice debates with AI personas. The system features a Flutter frontend, a NestJS backend, and a custom Python microservice for high-quality, low-latency text-to-speech (TTS) synthesis using Piper.
+**AI Debate Simulator** - A real-time adversarial debate system where two Large Language Models argue opposing positions on any topic, scored by an impartial AI judge.
 
-## 🏗️ Architecture
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.10+-blue.svg)](https://flutter.dev/)
+[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLMs-purple.svg)](https://ollama.ai/)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen.svg)](https://github.com/TrendySloth1001/argumentbot/releases)
 
-The system follows a microservices-inspired architecture:
+---
 
-```mermaid
-graph TD
-    Client[Flutter Mobile App]
-    
-    subgraph "Backend Services (Dockerized)"
-        API[NestJS Backend API]
-        DB[(PostgreSQL)]
-        MinIO[(MinIO Object Storage)]
-        TTS[TTS Microservice (Python/FastAPI)]
-    end
+## Screenshots
 
-    Client -- HTTP/WebSockets --> API
-    API -- ORM --> DB
-    API -- S3 Protocol --> MinIO
-    API -- HTTP --> TTS
-    
-    TTS -- Generates Audio --> PIPER[Piper TTS Engine]
-    TTS -- Returns Stream --> API
-    API -- Streams Audio --> Client
+| Home | Debate | History |
+|:----:|:------:|:-------:|
+| ![Home](screenshots/home.jpeg) | ![Debate](screenshots/debate.jpeg) | ![History](screenshots/history.jpeg) |
+
+| Feed | Settings |
+|:----:|:--------:|
+| ![Feed](screenshots/feed.jpeg) | ![Settings](screenshots/settings.jpeg) |
+
+---
+
+## Overview
+
+MrArgue pits two locally-hosted LLMs against each other in structured debates. Each model is constrained by strict rules that force adversarial reasoning: explicit claims, direct rebuttals, and pointed counter-questions. An AI judge scores each turn based on claim quality, directness, and attack strength.
+
+### Key Differentiators
+
+
+- **Adversarial by design**: Prompts enforce falsifiable claims and penalize vague abstractions
+- **RAG-enhanced**: Retrieval-augmented generation provides factual context
+- **Dual scoring modes**: AI judge or algorithmic heuristics
+- **Entertainment value**: AI models roast each other with witty comebacks
+
+---
+
+## System Architecture
+
+```
+                                 +-------------------+
+                                 |      Ollama       |
+                                 |  +-----------+    |
+                                 |  | Llama 3.2 |    |  (Proponent)
+                                 |  +-----------+    |
+                                 |  | Gemma 2:2b|    |  (Opponent)
+                                 |  +-----------+    |
+                                 |  |nomic-embed|    |  (RAG Embeddings)
+                                 |  +-----------+    |
+                                 +--------^----------+
+                                          |
++------------------+              +-------v--------+              +-------------+
+|                  |   REST API   |                |   Prisma    |             |
+|  Flutter Mobile  +<------------>+  NestJS API    +<----------->+   SQLite    |
+|     Client       |     JSON     |    Server      |     ORM     |  Database   |
+|                  |              |                |             |             |
++------------------+              +----------------+              +-------------+
 ```
 
-## 🚀 Key Features
+---
 
-- **Real-time Voice Debate**: Low-latency voice interaction with AI opponents.
-- **Dynamic Personas**: Choose between Proponent (For) and Opponent (Against) voices.
-- **Karaoke Mode**: Real-time text highlighting synchronized with audio playback.
-- **AI Judge**: Automated scoring and analysis of debate performance.
-- **Persistent Auth**: "Remember Me" functionality to keep users logged in.
-- **Offline Support**: Caching of debate history and audio files.
+## Features
 
-## 🛠️ Tech Stack
+### Implemented
 
-### Frontend (Mobile)
-- **Framework**: Flutter (Dart)
-- **State Management**: `setState` & Services pattern
-- **Audio**: `just_audio` with stream caching
-- **Storage**: `flutter_secure_storage`, `shared_preferences`
+| Category | Feature | Description |
+|:---------|:--------|:------------|
+| **Debates** | Multi-Model Debates | Llama 3.2 (PRO) vs Gemma 2:2b (CON) |
+| | Streaming Responses | Server-Sent Events for real-time generation |
+| | RAG Context | Embedding-based fact retrieval |
+| | Debate History | Persistent storage with replay |
+| **Scoring** | AI Judge | LLM-based analysis with detailed metrics |
+| | Algorithmic Judge | Heuristic scoring for instant results |
+| | Power Bar | Visual cumulative score display |
+| **Auth** | JWT Authentication | Stateless token-based auth |
+| | User Registration | Email/password with Argon2 hashing |
+| | Profile Management | Avatar selection, nickname/age |
+| **Social** | Community Feed | Posts with like functionality |
+| | Debate Sharing | Share results link generation |
+| **UI** | Dark Theme | Black + neon green aesthetic |
+| | How It Works | Interactive explainer with LaTeX formulas |
 
-### Backend (API)
-- **Framework**: NestJS (TypeScript)
-- **Database**: PostgreSQL (via Prisma ORM)
-- **Storage**: MinIO (S3-compatible object storage)
-- **Authentication**: JWT (Passport.js)
+### Roadmap
 
-### TTS Service
-- **Framework**: FastAPI (Python)
-- **Engine**: Piper TTS (Neural network-based synthesis)
-- **Deployment**: Dockerized with pre-downloaded voice models
+| Priority | Feature | Status |
+|:---------|:--------|:-------|
+| High | User vs AI Mode | Planned |
+| High | Topic Browser | Planned |
+| Medium | Social Sharing | Planned |
+| Medium | Debate Rematch | Planned |
+| Medium | Leaderboard | Planned |
+| Low | Voice Input | Planned |
+| Low | Multi-language | Planned |
 
-## 📂 Directory Structure
+---
 
-```graphql
-argumentbot/
-├── backend/                # NestJS Backend API
-│   ├── src/
-│   │   ├── auth/           # Authentication (JWT, Guards)
-│   │   ├── debate/         # Debate logic & scoring
-│   │   ├── tts/            # TTS Proxy & caching logic
-│   │   └── ...
-│   └── prisma/             # Database schema
-│
-├── frontend/               # Flutter Mobile Application
-│   ├── lib/
-│   │   ├── core/           # Shared services, config, theme
-│   │   ├── features/       # Feature-based modules (Auth, Debate, Settings)
-│   │   └── main.dart       # Entry point
-│   └── pubspec.yaml        # Dependencies
-│
-├── tts-service/            # Python Microservice
-│   ├── main.py             # FastAPI application
-│   └── Dockerfile          # Builds Piper & downloads models
-│
-└── docker-compose.yml      # Orchestration for DB, Redis, MinIO, TTS
+## Technology Stack
+
+### Backend
+
+| Component | Technology | Version | Purpose |
+|:----------|:-----------|:--------|:--------|
+| Runtime | Node.js | 20+ | JavaScript runtime |
+| Framework | NestJS | 11.x | API framework |
+| ORM | Prisma | 5.x | Database access |
+| Database | SQLite | 3.x | Data persistence |
+| Auth | Passport + JWT | - | Authentication |
+| Caching | cache-manager | 7.x | Response caching |
+| NLP | natural | 8.x | Algorithmic scoring |
+
+### Frontend
+
+| Component | Technology | Version | Purpose |
+|:----------|:-----------|:--------|:--------|
+| Framework | Flutter | 3.10+ | Cross-platform UI |
+| HTTP | http | 1.6.x | API communication |
+| Storage | flutter_secure_storage | 10.x | Token storage |
+| Math | flutter_math_fork | 0.7.x | LaTeX rendering |
+| Navigation | google_nav_bar | 5.x | Bottom navigation |
+
+### AI Infrastructure
+
+| Component | Technology | Purpose |
+|:----------|:-----------|:--------|
+| LLM Runtime | Ollama | Local model hosting |
+| Proponent Model | Llama 3.2 | Fast, consistent reasoning |
+| Opponent Model | Gemma 2:2b | Creative, divergent arguments |
+| Embedding Model | nomic-embed-text | Vector embeddings for RAG |
+
+---
+
+## Scoring Algorithms
+
+### AI Judge Scoring
+
+The AI judge evaluates each turn on three dimensions with vagueness penalties:
+
+```
+Persuasiveness = (C_claim + C_answer + C_attack) / 3 - V_penalty
 ```
 
-## ⚡ Setup & Installation
+| Metric | Range | Criteria |
+|:-------|:------|:---------|
+| `C_claim` | 0-100 | Falsifiable claim with evidence |
+| `C_answer` | 0-100 | Direct response to opponent's question |
+| `C_attack` | 0-100 | Specific flaw identification in opponent's argument |
+| `V_penalty` | -30 each | Penalty for undefined abstractions |
+
+### Algorithmic Scoring
+
+Instant heuristic-based scoring:
+
+```
+Score = w1 * L_arg + w2 * K_rel + w3 * C_struct
+```
+
+| Factor | Weight | Description |
+|:-------|:-------|:------------|
+| `L_arg` | 0.3 | Argument length (optimal: 50-150 words) |
+| `K_rel` | 0.4 | Keyword relevance to topic |
+| `C_struct` | 0.3 | Structural compliance (headers present) |
+
+### Power Bar Calculation
+
+Cumulative persuasiveness ratio:
+
+```
+R_pro = SUM(P_pro) / (SUM(P_pro) + SUM(P_con)) * 100%
+```
+
+### RAG Similarity
+
+Cosine similarity for context retrieval:
+
+```
+similarity(q, d) = (q . d) / (||q|| * ||d||)
+```
+
+---
+
+## Database Schema
+
+### Core Tables
+
+#### Users
+
+| Column | Type | Constraints | Description |
+|:-------|:-----|:------------|:------------|
+| `id` | UUID | PRIMARY KEY | Unique identifier |
+| `email` | VARCHAR | UNIQUE, NOT NULL | Login email |
+| `password` | VARCHAR | NOT NULL | Argon2 hash |
+| `avatarUrl` | VARCHAR | NULLABLE | Profile image URL |
+| `nickname` | VARCHAR | NULLABLE | Display name |
+| `age` | INTEGER | NULLABLE | User age |
+| `createdAt` | TIMESTAMP | DEFAULT NOW | Registration time |
+
+#### Debates
+
+| Column | Type | Constraints | Description |
+|:-------|:-----|:------------|:------------|
+| `id` | UUID | PRIMARY KEY | Unique identifier |
+| `topic` | VARCHAR | NOT NULL | Debate topic |
+| `status` | ENUM | NOT NULL | ACTIVE, FINISHED |
+| `userId` | UUID | FOREIGN KEY | Owner reference |
+| `createdAt` | TIMESTAMP | DEFAULT NOW | Start time |
+
+#### DebateTurns
+
+| Column | Type | Constraints | Description |
+|:-------|:-----|:------------|:------------|
+| `id` | UUID | PRIMARY KEY | Unique identifier |
+| `debateId` | UUID | FOREIGN KEY | Parent debate |
+| `speaker` | ENUM | NOT NULL | MODEL_A, MODEL_B |
+| `content` | TEXT | NOT NULL | Turn content |
+| `modelName` | VARCHAR | NOT NULL | LLM model used |
+| `analysis` | JSON | NULLABLE | Scoring data |
+| `timestamp` | TIMESTAMP | DEFAULT NOW | Turn time |
+
+---
+
+## API Reference
+
+### Authentication Endpoints
+
+| Method | Endpoint | Body | Response |
+|:-------|:---------|:-----|:---------|
+| `POST` | `/auth/register` | `{email, password}` | `{token, user}` |
+| `POST` | `/auth/login` | `{email, password}` | `{token, user}` |
+| `GET` | `/auth/verify` | - | `{user}` |
+| `POST` | `/auth/onboarding` | `{nickname, age}` | `{user}` |
+| `PUT` | `/auth/profile` | `{avatarUrl}` | `{user}` |
+
+### Debate Endpoints
+
+| Method | Endpoint | Body | Response |
+|:-------|:---------|:-----|:---------|
+| `GET` | `/debate` | - | `[Debate]` |
+| `GET` | `/debate/:id` | - | `Debate` |
+| `POST` | `/debate/start` | `{topic}` | `Debate` |
+| `POST` | `/debate/:id/turn` | `{scoringMode}` | `Debate` |
+| `GET` | `/debate/:id/turn/stream` | - | SSE Stream |
+
+### Feed Endpoints
+
+| Method | Endpoint | Body | Response |
+|:-------|:---------|:-----|:---------|
+| `GET` | `/feed` | - | `[Post]` |
+| `POST` | `/feed` | `{content, debateId?}` | `Post` |
+| `POST` | `/feed/:id/like` | - | `{liked}` |
+
+---
+
+## Installation
 
 ### Prerequisites
-- Docker & Docker Compose
-- Node.js (v18+)
-- Flutter SDK (v3.10+)
 
-### 1. Start Backend Services
+| Requirement | Version | Purpose |
+|:------------|:--------|:--------|
+| Node.js | 20+ | Backend runtime |
+| npm | 10+ | Package manager |
+| Flutter | 3.10+ | Frontend framework |
+| Ollama | Latest | LLM runtime |
+
+### 1. Clone Repository
+
 ```bash
-# Start PostgreSQL, MinIO, and TTS Service
-docker-compose up -d --build
+git clone https://github.com/TrendySloth1001/argumentbot.git
+cd argumentbot
 ```
-*Note: The TTS service may take a moment to initialize as it loads voice models.*
 
-### 2. Run Backend API
+### 2. Backend Setup
+
 ```bash
 cd backend
+
+# Install dependencies
 npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
+
+# Initialize database
 npx prisma generate
-npx prisma db push  # Update database schema
-npm run start:dev
+npx prisma migrate dev
+
+# Start development server
+npm run dev
 ```
 
-### 3. Run Mobile App
+### 3. Frontend Setup
+
 ```bash
 cd frontend
+
+# Install dependencies
 flutter pub get
+
+# Configure API URL
+# Edit lib/core/config/api_config.dart
+
+# Run application
 flutter run
 ```
 
-## ⚠️ Known Issues
+### 4. Ollama Setup
 
-- **Karaoke Sync**: The text highlighting in Karaoke mode involves estimating word duration based on character count. This may occasionally drift slightly from the actual audio playback, especially with faster voice models.
-- **Emulator Audio**: Audio playback latency can be higher on Android Emulators/iOS Simulators compared to physical devices.
-- **First-Time Load**: The first synthesis request for a specific phrase may have slight latency as the backend initializes the stream; subsequent requests are cached.
+```bash
+# Install Ollama from https://ollama.ai
 
-## 🗺️ Roadmap
+# Pull required models
+ollama pull llama3.2
+ollama pull gemma2:2b
+ollama pull nomic-embed-text
 
-- [ ] WebSocket-based real-time debate streaming.
-- [ ] Multi-user debate rooms.
-- [ ] Improved phoneme-based karaoke synchronization.
-- [ ] Custom voice cloning support.
+# Verify installation
+ollama list
+```
+
+---
+
+## Docker Deployment
+
+### Build Backend Image
+
+```bash
+cd backend
+docker build -t argumentbot-backend:latest .
+```
+
+### Run Container
+
+```bash
+docker run -d \
+  --name argumentbot-api \
+  -p 3000:3000 \
+  -e DATABASE_URL="file:./dev.db" \
+  -e JWT_SECRET="your-secret-key" \
+  -e OLLAMA_API_URL="http://host.docker.internal:11434" \
+  argumentbot-backend:latest
+```
+
+### Docker Compose
+
+```bash
+cd backend
+docker-compose up -d
+```
+
+---
+
+## Environment Variables
+
+### Backend Configuration
+
+| Variable | Required | Default | Description |
+|:---------|:---------|:--------|:------------|
+| `DATABASE_URL` | Yes | - | SQLite connection string |
+| `JWT_SECRET` | Yes | - | JWT signing secret |
+| `OLLAMA_API_URL` | No | `http://localhost:11434` | Ollama API endpoint |
+
+---
+
+## Project Structure
+
+```
+argumentbot/
++-- backend/
+|   +-- src/
+|   |   +-- auth/           # Authentication module
+|   |   +-- debate/         # Debate logic and scoring
+|   |   +-- feed/           # Social feed module
+|   |   +-- llm/            # Ollama integration
+|   |   +-- prisma/         # Database service
+|   |   +-- rag/            # Retrieval-augmented generation
+|   +-- prisma/
+|   |   +-- schema.prisma   # Database schema
+|   +-- Dockerfile
+|   +-- docker-compose.yml
++-- frontend/
+|   +-- lib/
+|   |   +-- core/           # Config, theme, utilities
+|   |   +-- features/       # Feature modules
+|   |       +-- auth/       # Login, registration
+|   |       +-- debate/     # Debate screens
+|   |       +-- feed/       # Social feed
+|   |       +-- home/       # Home screen
+|   |       +-- profile/    # User profile
+|   |       +-- settings/   # App settings
++-- README.md
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/new-feature`
+3. Commit changes: `git commit -m 'Add new feature'`
+4. Push to branch: `git push origin feature/new-feature`
+5. Submit a Pull Request
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
