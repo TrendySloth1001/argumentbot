@@ -22,7 +22,6 @@ class AudioWaveform extends StatefulWidget {
 class _AudioWaveformState extends State<AudioWaveform>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  final int _barCount = 30;
 
   @override
   void initState() {
@@ -43,54 +42,105 @@ class _AudioWaveformState extends State<AudioWaveform>
   Widget build(BuildContext context) {
     if (!widget.isPlaying) return const SizedBox.shrink();
 
-    final progress = (widget.duration.inMilliseconds > 0)
-        ? widget.position.inMilliseconds / widget.duration.inMilliseconds
-        : 0.0;
-
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: List.generate(_barCount, (index) {
-            // Symmetric shape: taller in center
-            // index 0..29. Center is 14.5.
-            double dist = (index - (_barCount / 2)).abs() / (_barCount / 2);
-            double baseHeight =
-                (1.0 - dist * 0.8); // 1.0 at center, 0.2 at edges
-
-            // Animation noise
-            double t = _controller.value * 2 * pi;
-            double noise = sin(t + index * 0.5) * 0.2;
-
-            // Random jitter for "voice" feel
-            double jitter =
-                Random(index + DateTime.now().millisecond).nextDouble() * 0.1;
-
-            double heightFactors = (baseHeight + noise + jitter).clamp(
-              0.1,
-              1.0,
-            );
-            double height = heightFactors * 24.0; // Max height 24
-
-            // Progress coloring
-            // Map index to 0..1 range
-            double barPos = index / _barCount;
-            bool isActive = barPos <= progress;
-
-            return Container(
-              width: 3,
-              height: height,
-              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-              decoration: BoxDecoration(
-                color: isActive ? widget.color : widget.color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            );
-          }),
-        );
-      },
+    return SizedBox(
+      height: 24, // Fixed height for the bar
+      width: double.infinity, // Full width
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _WaveformPainter(
+              progress: (widget.duration.inMilliseconds > 0)
+                  ? widget.position.inMilliseconds /
+                        widget.duration.inMilliseconds
+                  : 0.0,
+              animationValue: _controller.value,
+              color: widget.color,
+            ),
+          );
+        },
+      ),
     );
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  final double progress;
+  final double animationValue;
+  final Color color;
+
+  _WaveformPainter({
+    required this.progress,
+    required this.animationValue,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..strokeCap = StrokeCap.round;
+
+    // Configuration
+    const barWidth = 3.0;
+    const gap = 2.0;
+    final totalBarWidth = barWidth + gap;
+    final count = (size.width / totalBarWidth).floor();
+
+    // We want the waveform to be roughly symmetric around the center of the available width
+    // But since it's a progress bar, maybe just uniform?
+    // The user liked the "animation" from the image (symmetric).
+    // Let's do a symmetric shape centered in the width.
+
+    // Calculate how many bars fit
+    // If we want it to span FULL width, we distribute bars across width.
+
+    for (int i = 0; i < count; i++) {
+      // x position
+      double x = i * totalBarWidth + (size.width - (count * totalBarWidth)) / 2;
+
+      // Normalized position (-1 to 1) for symmetry
+      double normalizedPos = (i - (count / 2)) / (count / 2);
+
+      // Base height shape (bell curve-ish)
+      // 1.0 at center, 0.3 at edges
+      double baseHeightRatio = 1.0 - (normalizedPos.abs() * 0.7);
+
+      // Animation
+      // Wave moving left to right? or Standing wave?
+      // Standing wave breathing is nice.
+      double t = animationValue * 2 * pi;
+      double noise = sin(t + i * 0.2) * 0.2;
+      double jitter = Random(i).nextDouble() * 0.1;
+
+      double heightRatio = (baseHeightRatio + noise + jitter).clamp(0.1, 1.0);
+      double barHeight = heightRatio * size.height;
+
+      // Progress Coloring
+      // Map i to 0..1
+      double barProgress = i / count;
+      bool isActive = barProgress <= progress;
+
+      paint.color = isActive ? color : color.withOpacity(0.2);
+
+      // Draw centered vertically
+      double y = (size.height - barHeight) / 2;
+
+      // Rounded rect
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, barWidth, barHeight),
+          const Radius.circular(1.5),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.animationValue != animationValue ||
+        oldDelegate.color != color;
   }
 }

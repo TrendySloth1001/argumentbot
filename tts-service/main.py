@@ -71,6 +71,8 @@ VOICE_METADATA = {
 class SynthesizeRequest(BaseModel):
     text: str
     voice: str | None = None
+    speed: float = 0.95  # Slightly faster by default
+    sentence_silence: float = 0.1 # Reduced silence for better flow
 
 @app.get("/health")
 async def health():
@@ -112,8 +114,19 @@ async def synthesize(request: SynthesizeRequest):
     
     try:
         # Run piper to synthesize audio
+        # Optimized parameters for speed and human-like prosody
+        cmd = [
+            "piper", 
+            "--model", str(voice_path), 
+            "--output_raw",
+            "--length_scale", str(request.speed),
+            "--sentence_silence", str(request.sentence_silence),
+            "--noise_scale", "0.667", # Default var
+            "--noise_w", "0.8"        # Default pronunciation var
+        ]
+
         process = subprocess.Popen(
-            ["piper", "--model", str(voice_path), "--output_raw"],
+            cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
