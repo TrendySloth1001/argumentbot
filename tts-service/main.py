@@ -8,7 +8,7 @@ import os
 import wave
 from pathlib import Path
 
-app = FastAPI(title="ArgumentBot TTS Service", version="1.0.0")
+app = FastAPI(title="ArgumentBot TTS Service", version="2.0.0")
 
 # CORS for backend access
 app.add_middleware(
@@ -20,7 +20,53 @@ app.add_middleware(
 )
 
 VOICES_DIR = Path("/app/voices")
-DEFAULT_VOICE = "en_US-lessac-medium"
+DEFAULT_VOICE = "en_US-amy-medium"
+
+# Voice metadata for UI display
+VOICE_METADATA = {
+    "en_US-amy-medium": {
+        "name": "Amy",
+        "gender": "female",
+        "accent": "American",
+        "quality": "medium",
+        "description": "Natural female voice, warm tone"
+    },
+    "en_US-ryan-high": {
+        "name": "Ryan",
+        "gender": "male",
+        "accent": "American",
+        "quality": "high",
+        "description": "Professional male voice, clear and authoritative"
+    },
+    "en_GB-alba-medium": {
+        "name": "Alba",
+        "gender": "female",
+        "accent": "British",
+        "quality": "medium",
+        "description": "British female voice, elegant"
+    },
+    "en_US-joe-medium": {
+        "name": "Joe",
+        "gender": "male",
+        "accent": "American",
+        "quality": "medium",
+        "description": "Casual male voice, friendly"
+    },
+    "en_US-lessac-high": {
+        "name": "Lessac",
+        "gender": "female",
+        "accent": "American",
+        "quality": "high",
+        "description": "High-quality female voice, expressive"
+    },
+    "en_US-danny-low": {
+        "name": "Danny",
+        "gender": "male",
+        "accent": "American",
+        "quality": "low",
+        "description": "Fast male voice, quick responses"
+    }
+}
 
 class SynthesizeRequest(BaseModel):
     text: str
@@ -32,17 +78,24 @@ async def health():
 
 @app.get("/voices")
 async def list_voices():
-    """List available voice models"""
+    """List available voice models with metadata"""
     voices = []
     if VOICES_DIR.exists():
         for onnx_file in VOICES_DIR.glob("*.onnx"):
-            voice_name = onnx_file.stem
+            voice_id = onnx_file.stem
+            metadata = VOICE_METADATA.get(voice_id, {})
             voices.append({
-                "id": voice_name,
-                "name": voice_name.replace("-", " ").replace("_", " ").title(),
-                "language": voice_name.split("-")[0] if "-" in voice_name else "unknown"
+                "id": voice_id,
+                "name": metadata.get("name", voice_id),
+                "gender": metadata.get("gender", "unknown"),
+                "accent": metadata.get("accent", "unknown"),
+                "quality": metadata.get("quality", "medium"),
+                "description": metadata.get("description", ""),
             })
-    return {"voices": voices}
+    # Sort by quality (high first) then name
+    quality_order = {"high": 0, "medium": 1, "low": 2}
+    voices.sort(key=lambda v: (quality_order.get(v["quality"], 1), v["name"]))
+    return {"voices": voices, "default": DEFAULT_VOICE}
 
 @app.post("/synthesize")
 async def synthesize(request: SynthesizeRequest):
@@ -54,7 +107,7 @@ async def synthesize(request: SynthesizeRequest):
         # Try to find any available voice
         available_voices = list(VOICES_DIR.glob("*.onnx"))
         if not available_voices:
-            raise HTTPException(status_code=404, detail="No voice models found. Please download a voice first.")
+            raise HTTPException(status_code=404, detail="No voice models found.")
         voice_path = available_voices[0]
     
     try:

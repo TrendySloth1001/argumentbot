@@ -9,6 +9,7 @@ import '../../data/services/debate_service.dart';
 import '../widgets/power_bar.dart';
 import '../../../feed/presentation/widgets/share_debate_dialog.dart';
 import '../../../../core/services/tts_service.dart';
+import '../../../../core/data/voice_settings.dart';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -78,7 +79,11 @@ class _DebateScreenState extends State<DebateScreen> {
         .trim();
   }
 
-  Future<void> _playTurnAudio(String turnId, String content) async {
+  Future<void> _playTurnAudio(
+    String turnId,
+    String content, {
+    bool isModelA = true,
+  }) async {
     if (_loadingTurns[turnId] == true) return;
 
     // If already playing, stop
@@ -91,9 +96,17 @@ class _DebateScreenState extends State<DebateScreen> {
     setState(() => _loadingTurns[turnId] = true);
 
     try {
+      // Get the appropriate voice based on speaker
+      final voice = isModelA
+          ? await VoiceSettings.getProponentVoice()
+          : await VoiceSettings.getOpponentVoice();
+
       // Strip markdown before TTS
       final cleanContent = _stripMarkdown(content);
-      final Uint8List audioBytes = await _ttsService.synthesize(cleanContent);
+      final Uint8List audioBytes = await _ttsService.synthesize(
+        cleanContent,
+        voice: voice,
+      );
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
@@ -467,7 +480,8 @@ class _DebateScreenState extends State<DebateScreen> {
               const SizedBox(width: 8),
               // Speaker Button
               GestureDetector(
-                onTap: () => _playTurnAudio(turn.id, turn.content),
+                onTap: () =>
+                    _playTurnAudio(turn.id, turn.content, isModelA: isModelA),
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(

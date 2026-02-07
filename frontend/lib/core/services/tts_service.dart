@@ -33,19 +33,32 @@ class TtsService {
     final token = await _authService.getToken();
     if (token == null) throw Exception('Not authenticated');
 
-    final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/tts/voices'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/tts/voices'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return List<Map<String, dynamic>>.from(data['voices'] ?? []);
-    } else {
-      throw Exception('Failed to get voices');
+      if (response.statusCode == 200) {
+        final dynamic data = jsonDecode(response.body);
+
+        // Handle both List (direct from backend) and Map (wrapped) formats
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        } else if (data is Map && data.containsKey('voices')) {
+          return List<Map<String, dynamic>>.from(data['voices']);
+        }
+
+        return [];
+      } else {
+        throw Exception('Failed to get voices: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching voices: $e');
+      rethrow;
     }
   }
 
