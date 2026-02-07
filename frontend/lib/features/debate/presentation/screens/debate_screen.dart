@@ -10,6 +10,8 @@ import '../widgets/power_bar.dart';
 import '../../../feed/presentation/widgets/share_debate_dialog.dart';
 import '../../../../core/services/tts_service.dart';
 import '../../../../core/data/voice_settings.dart';
+import '../widgets/audio_waveform.dart';
+import '../widgets/karaoke_text.dart';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -520,29 +522,56 @@ class _DebateScreenState extends State<DebateScreen> {
           const SizedBox(height: 12),
 
           // Content
-          MarkdownBody(
-            data: turn.content,
-            styleSheet: MarkdownStyleSheet(
-              p: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                height: 1.6,
-              ),
-              h2: const TextStyle(
-                color: neonGreen,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                height: 2,
-              ),
-              h3: const TextStyle(
-                color: Colors.amberAccent,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                height: 2,
-              ),
-              listBullet: const TextStyle(color: Colors.white),
+          if (_playingTurns[turn.id] == true) ...[
+            KaraokeText(
+              text: turn.content,
+              audioPlayer: _audioPlayers[turn.id],
+              isPlaying: true,
             ),
-          ),
+            const SizedBox(height: 12),
+            // Sound Bar (Symmetric Waveform)
+            StreamBuilder<Duration>(
+              stream: _audioPlayers[turn.id]?.positionStream,
+              builder: (context, snapshot) {
+                final position = snapshot.data ?? Duration.zero;
+                final duration =
+                    _audioPlayers[turn.id]?.duration ?? Duration.zero;
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: AudioWaveform(
+                    isPlaying: true,
+                    position: position,
+                    duration: duration,
+                    color: neonGreen,
+                  ),
+                );
+              },
+            ),
+          ] else
+            MarkdownBody(
+              data: turn.content,
+              styleSheet: MarkdownStyleSheet(
+                p: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  height: 1.6,
+                ),
+                h2: const TextStyle(
+                  color: neonGreen,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  height: 2,
+                ),
+                h3: const TextStyle(
+                  color: Colors.amberAccent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  height: 2,
+                ),
+                listBullet: const TextStyle(color: Colors.white),
+              ),
+            ),
 
           // Analysis tags
           if (turn.analysis != null) ...[
