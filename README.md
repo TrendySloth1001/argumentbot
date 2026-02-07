@@ -37,7 +37,7 @@ MrArgue pits two locally-hosted LLMs against each other in structured debates. E
 
 ## System Architecture
 
-![System Architecture](file:///Users/nick/.gemini/antigravity/brain/fbaa8d72-728d-4102-a10d-634a6129c37c/architecture_diagram_1770488375912.png)
+![System Architecture](screenshots/architecture_diagram.png)
 
 ---
 
@@ -346,7 +346,7 @@ docker-compose up -d
 
 ## Project Structure
 
-![Directory Structure](file:///Users/nick/.gemini/antigravity/brain/fbaa8d72-728d-4102-a10d-634a6129c37c/directory_structure_diagram_1770488393704.png)
+![Directory Structure](screenshots/directory_structure.png)
 
 ---
 
