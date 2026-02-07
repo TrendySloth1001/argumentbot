@@ -1,14 +1,12 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/data/settings_manager.dart';
 import '../../../../core/data/voice_settings.dart';
 import '../../../../core/services/tts_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
+
 import '../../../../core/config/api_config.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'how_it_works_screen.dart';
@@ -25,7 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoading = true;
 
   // Server status states
-  Map<String, String> _serverStatus = {
+  final Map<String, String> _serverStatus = {
     'backend': 'unknown',
     'tts': 'unknown',
     'minio': 'unknown',
@@ -34,11 +32,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Voice settings state
   final TtsService _ttsService = TtsService();
-  final AudioPlayer _audioPlayer = AudioPlayer();
+
   List<VoiceModel> _availableVoices = [];
   String _proponentVoice = 'en_US-amy-medium';
   String _opponentVoice = 'en_US-ryan-high';
-  String? _previewingVoice;
+
   String? _errorMessage;
   bool _isAudioCacheEnabled = true;
   bool _isKaraokeEnabled = true;
@@ -56,10 +54,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadVoices();
   }
 
+  final _previewPlayer = AudioPlayer();
+  String? _playingVoiceId;
+
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    _previewPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _previewVoice(VoiceModel voice) async {
+    try {
+      if (_playingVoiceId == voice.id) {
+        await _previewPlayer.stop();
+        setState(() => _playingVoiceId = null);
+        return;
+      }
+
+      await _previewPlayer.stop();
+      setState(() => _playingVoiceId = voice.id);
+
+      // Example text for preview
+      const text = "Hello! I am ready to debate with you.";
+      final url = _ttsService.getStreamUrl(text, voice: voice.id);
+
+      await _previewPlayer.setUrl(url);
+      await _previewPlayer.play();
+
+      _previewPlayer.playerStateStream.listen((state) {
+        if (state.processingState == ProcessingState.completed) {
+          if (mounted) {
+            setState(() => _playingVoiceId = null);
+          }
+        }
+      });
+    } catch (e) {
+      print('Preview error: $e');
+      if (mounted) {
+        setState(() => _playingVoiceId = null);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to play preview: $e')));
+      }
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -159,48 +196,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _previewVoice(String voiceId) async {
-    if (_previewingVoice == voiceId) {
-      await _audioPlayer.stop();
-      setState(() => _previewingVoice = null);
-      return;
-    }
-
-    setState(() => _previewingVoice = voiceId);
-
-    try {
-      final Uint8List audioBytes = await _ttsService.synthesize(
-        "Hello! This is a preview of my voice. How do I sound?",
-        voice: voiceId,
-      );
-
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/preview_$voiceId.wav');
-      await tempFile.writeAsBytes(audioBytes);
-
-      await _audioPlayer.setFilePath(tempFile.path);
-
-      _audioPlayer.playerStateStream.listen((state) {
-        if (state.processingState == ProcessingState.completed) {
-          if (mounted) setState(() => _previewingVoice = null);
-          tempFile.delete().catchError((_) => tempFile);
-        }
-      });
-
-      await _audioPlayer.play();
-    } catch (e) {
-      setState(() => _previewingVoice = null);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Preview failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _updateProponentVoice(String? voiceId) async {
     if (voiceId == null) return;
     await VoiceSettings.setProponentVoice(voiceId);
@@ -296,723 +291,207 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildServerStatusCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildServerStatusList() {
+    return Column(
+      children: [
+        Container(height: 1, color: Colors.grey[900]),
+        _buildServerStatusRow('Backend API', 'backend'),
+        _buildDivider(),
+        _buildServerStatusRow('TTS Service', 'tts'),
+        _buildDivider(),
+        _buildServerStatusRow('MinIO Storage', 'minio'),
+        Container(height: 1, color: Colors.grey[900]),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
             children: [
-              const Icon(Icons.dns, color: neonGreen, size: 22),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Server Status',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'Check all service health',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
+              Expanded(
+                child: Text(
+                  'Check all services status',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
               ),
               GestureDetector(
                 onTap: _isCheckingStatus ? null : _checkAllServerStatus,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                child: Text(
+                  _isCheckingStatus ? 'Checking...' : 'Check Now',
+                  style: TextStyle(
+                    color: _isCheckingStatus ? Colors.grey : neonGreen,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
-                  decoration: BoxDecoration(
-                    color: _isCheckingStatus ? Colors.grey[700] : neonGreen,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _isCheckingStatus
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
-                          ),
-                        )
-                      : const Text(
-                          'Check',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildServerStatusRow('Backend API', 'backend', Icons.api),
-          const SizedBox(height: 8),
-          _buildServerStatusRow('TTS Service', 'tts', Icons.record_voice_over),
-          const SizedBox(height: 8),
-          _buildServerStatusRow('MinIO Storage', 'minio', Icons.storage),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildServerStatusRow(String name, String key, IconData icon) {
+  Widget _buildServerStatusRow(String name, String key) {
     final status = _serverStatus[key] ?? 'unknown';
     Color statusColor;
-    IconData statusIcon;
+    String statusText;
 
     switch (status) {
       case 'online':
         statusColor = neonGreen;
-        statusIcon = Icons.check_circle;
+        statusText = 'ONLINE';
         break;
       case 'offline':
         statusColor = Colors.red;
-        statusIcon = Icons.cancel;
+        statusText = 'OFFLINE';
         break;
       case 'error':
         statusColor = Colors.orange;
-        statusIcon = Icons.warning;
+        statusText = 'ERROR';
         break;
       default:
         statusColor = Colors.grey;
-        statusIcon = Icons.help_outline;
+        statusText = 'UNKNOWN';
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(8),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      title: Text(
+        name,
+        style: const TextStyle(color: Colors.white, fontSize: 15),
       ),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.grey[400], size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              name,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-            ),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: statusColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: statusColor.withOpacity(0.3)),
+        ),
+        child: Text(
+          statusText,
+          style: TextStyle(
+            color: statusColor,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
           ),
-          Icon(statusIcon, color: statusColor, size: 18),
-          const SizedBox(width: 6),
-          Text(
-            status.toUpperCase(),
-            style: TextStyle(
-              color: statusColor,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildVoiceSettingsCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.record_voice_over, color: neonGreen, size: 22),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'TTS Voices',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'Different voices for each debater',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              // Refresh button
-              GestureDetector(
-                onTap: _loadVoices,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(Icons.refresh, size: 16, color: Colors.grey[400]),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+  Widget _buildVoiceSettingsList() {
+    return Column(
+      children: [
+        Container(height: 1, color: Colors.grey[900]),
+        // Proponent
+        _buildVoiceSettingTile(
+          label: 'Proponent Voice',
+          subtitle: 'Argues FOR the topic',
+          color: neonPurple,
+          voiceId: _proponentVoice,
+          onChanged: _updateProponentVoice,
+        ),
+        _buildDivider(),
+        // Opponent
+        _buildVoiceSettingTile(
+          label: 'Opponent Voice',
+          subtitle: 'Argues AGAINST the topic',
+          color: neonBlue,
+          voiceId: _opponentVoice,
+          onChanged: _updateOpponentVoice,
+        ),
+        Container(height: 1, color: Colors.grey[900]),
 
-          // Voice count indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: neonGreen.withAlpha(20),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: neonGreen.withAlpha(50)),
-            ),
+        const SizedBox(height: 24),
+        _buildSectionHeader('PREFERENCES'),
+        Container(height: 1, color: Colors.grey[900]),
+
+        // Audio Cache
+        SwitchListTile(
+          activeColor: neonGreen,
+          activeTrackColor: neonGreen.withAlpha(50),
+          inactiveThumbColor: Colors.grey[400],
+          inactiveTrackColor: Colors.grey[800],
+          tileColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: const Text(
+            'Cache Audio',
+            style: TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          subtitle: Text(
+            'Save voices to device ($_cacheSize)',
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          ),
+          value: _isAudioCacheEnabled,
+          onChanged: _toggleAudioCache,
+        ),
+
+        if (_isAudioCacheEnabled && _cacheSize != '0 B')
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_circle, size: 14, color: neonGreen),
-                const SizedBox(width: 6),
-                Text(
-                  '${_availableVoices.length} voices available',
-                  style: TextStyle(
-                    color: neonGreen,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                TextButton.icon(
+                  onPressed: _clearAudioCache,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 16,
+                    color: Colors.redAccent,
+                  ),
+                  label: const Text(
+                    'Clear Cache',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 13),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.red.withOpacity(0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
 
-          // Proponent Voice Section
-          _buildVoiceSelectorExpanded(
-            label: 'PROPONENT VOICE',
-            subtitle: 'Argues FOR the topic',
-            color: neonPurple,
-            selectedVoice: _proponentVoice,
-            onChanged: _updateProponentVoice,
+        _buildDivider(),
+
+        // Karaoke Toggle
+        SwitchListTile(
+          activeColor: neonGreen,
+          activeTrackColor: neonGreen.withAlpha(50),
+          inactiveThumbColor: Colors.grey[400],
+          inactiveTrackColor: Colors.grey[800],
+          tileColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: const Text(
+            'Karaoke Mode',
+            style: TextStyle(color: Colors.white, fontSize: 16),
           ),
-          const SizedBox(height: 16),
-
-          // Opponent Voice Section
-          _buildVoiceSelectorExpanded(
-            label: 'OPPONENT VOICE',
-            subtitle: 'Argues AGAINST the topic',
-            color: neonBlue,
-            selectedVoice: _opponentVoice,
-            onChanged: _updateOpponentVoice,
+          subtitle: Text(
+            'Highlight text as it is spoken',
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
           ),
+          value: _isKaraokeEnabled,
+          onChanged: _toggleKaraoke,
+        ),
+        Container(height: 1, color: Colors.grey[900]),
 
-          const SizedBox(height: 16),
-
-          // Storage info footer
-          const SizedBox(height: 20),
-          Container(height: 1, color: Colors.grey[800]),
-          const SizedBox(height: 16),
-
-          // Cache Controls
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Cache Audio',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Save voices to device ($_cacheSize)',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: _isAudioCacheEnabled,
-                onChanged: _toggleAudioCache,
-                activeColor: neonGreen,
-                activeTrackColor: neonGreen.withAlpha(50),
-                inactiveThumbColor: Colors.grey[400],
-                inactiveTrackColor: Colors.grey[800],
-              ),
-            ],
-          ),
-
-          if (_isAudioCacheEnabled && _cacheSize != '0 B') ...[
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: _clearAudioCache,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 8,
-                  horizontal: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.red.withAlpha(20),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withAlpha(50)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.delete_outline,
-                      size: 16,
-                      color: Colors.redAccent,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Clear Cache',
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 16),
-          // Karaoke Toggle
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Karaoke Mode',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Highlight text as it is spoken',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: _isKaraokeEnabled,
-                onChanged: _toggleKaraoke,
-                activeColor: neonGreen,
-                activeTrackColor: neonGreen.withAlpha(50),
-                inactiveThumbColor: Colors.grey[400],
-                inactiveTrackColor: Colors.grey[800],
-              ),
-            ],
-          ),
-
-          if (_errorMessage != null || _availableVoices.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withAlpha(20),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withAlpha(50)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning, size: 16, color: Colors.orange),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _errorMessage != null
-                            ? 'Error: ${_errorMessage!.replaceAll("Exception:", "").trim()}'
-                            : 'Loading voices...',
-                        style: const TextStyle(
-                          color: Colors.orange,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVoiceSelectorExpanded({
-    required String label,
-    required String subtitle,
-    required Color color,
-    required String selectedVoice,
-    required Function(String?) onChanged,
-  }) {
-    // Find current voice details
-    final currentVoice = _availableVoices.firstWhere(
-      (v) => v.id == selectedVoice,
-      orElse: () => _availableVoices.isNotEmpty
-          ? _availableVoices.first
-          : VoiceModel(
-              id: '',
-              name: 'Loading...',
-              gender: '',
-              accent: '',
-              quality: '',
-              description: '',
-            ),
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withAlpha(100)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              // Preview button
-              GestureDetector(
-                onTap: () => _previewVoice(currentVoice.id),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _previewingVoice == currentVoice.id
-                        ? neonGreen.withAlpha(30)
-                        : Colors.grey[800],
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: _previewingVoice == currentVoice.id
-                          ? neonGreen
-                          : Colors.grey[700]!,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_previewingVoice == currentVoice.id)
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: neonGreen,
-                          ),
-                        )
-                      else
-                        Icon(
-                          Icons.play_arrow,
-                          size: 14,
-                          color: Colors.grey[400],
-                        ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Preview',
-                        style: TextStyle(
-                          color: _previewingVoice == currentVoice.id
-                              ? neonGreen
-                              : Colors.grey[400],
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Voice dropdown with full details
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButton<String>(
-              value: _availableVoices.any((v) => v.id == selectedVoice)
-                  ? selectedVoice
-                  : (_availableVoices.isNotEmpty
-                        ? _availableVoices.first.id
-                        : null),
-              isExpanded: true,
-              dropdownColor: Colors.grey[850],
-              underline: const SizedBox(),
-              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey[400]),
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              items: _availableVoices.map((voice) {
-                return DropdownMenuItem<String>(
-                  value: voice.id,
-                  child: Row(
-                    children: [
-                      // Gender icon
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: voice.gender == 'female'
-                              ? Colors.pinkAccent.withAlpha(30)
-                              : Colors.lightBlueAccent.withAlpha(30),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Icon(
-                          voice.gender == 'female' ? Icons.female : Icons.male,
-                          size: 14,
-                          color: voice.gender == 'female'
-                              ? Colors.pinkAccent
-                              : Colors.lightBlueAccent,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Name and accent
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              voice.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              voice.accent,
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Quality badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getQualityColor(voice.quality).withAlpha(30),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          voice.quality.toUpperCase(),
-                          style: TextStyle(
-                            color: _getQualityColor(voice.quality),
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: onChanged,
+        if (_errorMessage != null || _availableVoices.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              _errorMessage ?? 'Loading voices...',
+              style: const TextStyle(color: Colors.orange, fontSize: 12),
             ),
           ),
-
-          // Current voice description
-          if (currentVoice.description.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              currentVoice.description,
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Color _getQualityColor(String quality) {
-    switch (quality.toLowerCase()) {
-      case 'high':
-        return neonGreen;
-      case 'medium':
-        return Colors.amber;
-      case 'low':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: neonGreen))
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    const Text(
-                      'Settings',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildDivider(),
-                    const SizedBox(height: 24),
-
-                    // Server Status
-                    _buildSectionTitle('System'),
-                    const SizedBox(height: 12),
-                    _buildServerStatusCard(),
-
-                    const SizedBox(height: 24),
-                    _buildDivider(),
-                    const SizedBox(height: 24),
-
-                    // Voice Settings
-                    _buildSectionTitle('Voice Settings'),
-                    const SizedBox(height: 12),
-                    _buildVoiceSettingsCard(),
-
-                    const SizedBox(height: 24),
-                    _buildDivider(),
-                    const SizedBox(height: 24),
-
-                    // Debate Analysis
-                    _buildSectionTitle('Debate Analysis'),
-                    const SizedBox(height: 12),
-                    _buildRadioOption(
-                      title: 'AI Judge',
-                      subtitle: 'Slower (5s), deeper analysis',
-                      value: 'AI',
-                    ),
-                    _buildRadioOption(
-                      title: 'Algorithmic Judge',
-                      subtitle: 'Instant heuristic scoring',
-                      value: 'ALGO',
-                    ),
-
-                    const SizedBox(height: 24),
-                    _buildDivider(),
-                    const SizedBox(height: 24),
-
-                    // About
-                    _buildSectionTitle('About'),
-                    const SizedBox(height: 12),
-                    _buildListTile(
-                      icon: Icons.science_outlined,
-                      title: 'How It Works',
-                      subtitle: 'RAG, scoring, math formulas',
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const HowItWorksScreen(),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                    _buildDivider(),
-                    const SizedBox(height: 24),
-
-                    // Legal
-                    _buildSectionTitle('Legal'),
-                    const SizedBox(height: 12),
-                    _buildListTile(
-                      icon: Icons.description_outlined,
-                      title: 'Terms & Privacy Policy',
-                      subtitle: 'Accepted',
-                      onTap: _showPolicyPage,
-                    ),
-
-                    const SizedBox(height: 24),
-                    _buildDivider(),
-                    const SizedBox(height: 24),
-
-                    // Open Source
-                    _buildSectionTitle('Open Source'),
-                    const SizedBox(height: 12),
-                    _buildGitHubCard(),
-                  ],
-                ),
-              ),
-      ),
+      ],
     );
   }
 
   Widget _buildDivider() {
     return Container(
       height: 1,
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -1027,58 +506,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title.toUpperCase(),
-      style: TextStyle(
-        color: Colors.grey[500],
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-
-  Widget _buildRadioOption({
-    required String title,
+  Widget _buildVoiceSettingTile({
+    required String label,
     required String subtitle,
-    required String value,
+    required Color color,
+    required String voiceId,
+    required Function(String?) onChanged,
   }) {
-    final isSelected = value == _scoringMode;
-    return GestureDetector(
-      onTap: () => _updateScoringMode(value),
+    final currentVoice = _availableVoices.firstWhere(
+      (v) => v.id == voiceId,
+      orElse: () => _availableVoices.isNotEmpty
+          ? _availableVoices.first
+          : const VoiceModel(
+              id: '',
+              name: 'Loading...',
+              gender: '',
+              accent: '',
+              quality: '',
+              description: '',
+            ),
+    );
+
+    return InkWell(
+      onTap: () {
+        _showVoiceSelectionSheet(label, color, voiceId, onChanged);
+      },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
-          border: isSelected ? Border.all(color: neonGreen) : null,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(color: Colors.transparent),
         child: Row(
           children: [
             Container(
-              width: 20,
-              height: 20,
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? neonGreen : Colors.grey[600]!,
-                  width: 2,
-                ),
+                border: Border.all(color: color.withOpacity(0.3), width: 1),
               ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: neonGreen,
-                        ),
-                      ),
-                    )
-                  : null,
+              child: Icon(Icons.record_voice_over, color: color, size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -1086,20 +551,280 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    label.toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 11,
+                      letterSpacing: 1.2,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        currentVoice.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          currentVoice.accent,
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+            Icon(Icons.chevron_right, color: Colors.grey[700], size: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showVoiceSelectionSheet(
+    String title,
+    Color color,
+    String currentVoiceId,
+    Function(String?) onChanged,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _availableVoices.length,
+                  itemBuilder: (context, index) {
+                    final voice = _availableVoices[index];
+                    final isSelected = voice.id == currentVoiceId;
+                    return ListTile(
+                      leading: IconButton(
+                        icon: Icon(
+                          _playingVoiceId == voice.id
+                              ? Icons.stop_circle
+                              : Icons.play_circle_fill,
+                          color: _playingVoiceId == voice.id
+                              ? Colors.redAccent
+                              : color,
+                          size: 32,
+                        ),
+                        onPressed: () => _previewVoice(voice),
+                      ),
+                      title: Text(
+                        voice.name,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.grey[400],
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${voice.accent} • ${voice.quality}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      trailing: isSelected
+                          ? Icon(Icons.check, color: color)
+                          : null,
+                      onTap: () {
+                        onChanged(voice.id);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: neonGreen));
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: ListView(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Row(
+                children: [
+                  const Text(
+                    'Settings',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _loadSettings,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[900],
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.refresh,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            _buildSectionHeader('SERVER STATUS'),
+            _buildServerStatusList(),
+
+            const SizedBox(height: 24),
+            _buildSectionHeader('VOICE SETTINGS'),
+            _buildVoiceSettingsList(),
+
+            const SizedBox(height: 24),
+            _buildSectionHeader('DEBATE ANALYSIS'),
+            Container(height: 1, color: Colors.grey[900]),
+            RadioListTile<String>(
+              title: const Text(
+                'AI Judge',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+              subtitle: const Text(
+                'Slower (5s), deeper analysis',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              value: 'AI',
+              groupValue: _scoringMode,
+              onChanged: (value) => _updateScoringMode(value),
+              activeColor: neonGreen,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              tileColor: Colors.transparent,
+            ),
+            _buildDivider(),
+            RadioListTile<String>(
+              title: const Text(
+                'Algorithmic Judge',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+              subtitle: const Text(
+                'Instant heuristic scoring',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              value: 'ALGO',
+              groupValue: _scoringMode,
+              onChanged: (value) => _updateScoringMode(value),
+              activeColor: neonGreen,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              tileColor: Colors.transparent,
+            ),
+            Container(height: 1, color: Colors.grey[900]),
+
+            const SizedBox(height: 24),
+            _buildSectionHeader('ABOUT'),
+            _buildListTile(
+              icon: Icons.info_outline,
+              title: 'How it Works',
+              subtitle: 'Learn about the debate scoring and logic',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const HowItWorksScreen(),
+                  ),
+                );
+              },
+            ),
+            _buildDivider(),
+            _buildListTile(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Privacy Policy',
+              onTap: _showPolicyPage,
+            ),
+            _buildDivider(),
+            _buildListTile(
+              icon: Icons.code,
+              title: 'Source Code',
+              subtitle: 'View on GitHub',
+              onTap: _openGitHub,
+            ),
+
+            const SizedBox(height: 48),
+            Center(
+              child: Text(
+                'Version 1.0.0',
+                style: TextStyle(color: Colors.grey[800], fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: neonGreen,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
         ),
       ),
     );
@@ -1108,17 +833,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildListTile({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
-        ),
+        color: Colors.transparent, // Make entire area tappable
         child: Row(
           children: [
             Icon(icon, color: neonGreen, size: 22),
@@ -1127,141 +849,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white)),
                   Text(
-                    subtitle,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    title,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[600]),
+            Icon(Icons.chevron_right, color: Colors.grey[700]),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildGitHubCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: neonGreen.withAlpha(77)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.code, color: neonGreen, size: 22),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'TrendySloth1001/argumentbot',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'AI Debate Simulator',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text(
-              "So you've been using this app for free, huh?\n\n"
-              "Look, I'm not saying you OWE me anything... but if you're a dev "
-              "and you haven't starred the repo yet, that's kinda sus.\n\n"
-              "Just saying... the star button doesn't bite. Fork it if you're brave enough.",
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: _openGitHub,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: neonGreen,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.star_border, color: Colors.black, size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          'Star It',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: GestureDetector(
-                  onTap: _openGitHub,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[700]!),
-                    ),
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.fork_right,
-                          color: Colors.grey[400],
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Fork It',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
