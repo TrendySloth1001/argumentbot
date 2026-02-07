@@ -62,4 +62,16 @@ class VoiceSettings {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_opponentVoiceKey, voiceId);
   }
+
+  /// Get audio caching preference (default: true)
+  static Future<bool> getAudioCacheEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('audio_cache_enabled') ?? true;
+  }
+
+  /// Set audio caching preference
+  static Future<bool> setAudioCacheEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.setBool('audio_cache_enabled', enabled);
+  }
 }

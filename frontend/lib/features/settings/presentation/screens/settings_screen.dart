@@ -40,6 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _opponentVoice = 'en_US-ryan-high';
   String? _previewingVoice;
   String? _errorMessage;
+  bool _isAudioCacheEnabled = true;
+  String _cacheSize = '0 KB';
 
   // Theme colors
   static const Color neonGreen = Color(0xFF00FF88);
@@ -63,12 +65,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final mode = await SettingsManager.getScoringMode();
     final proVoice = await VoiceSettings.getProponentVoice();
     final oppVoice = await VoiceSettings.getOpponentVoice();
+    final cacheEnabled = await VoiceSettings.getAudioCacheEnabled();
+
+    await _updateCacheSize();
+
     setState(() {
       _scoringMode = mode;
       _proponentVoice = proVoice;
       _opponentVoice = oppVoice;
+      _isAudioCacheEnabled = cacheEnabled;
       _isLoading = false;
     });
+  }
+
+  Future<void> _updateCacheSize() async {
+    final bytes = await _ttsService.getCacheSize();
+    setState(() {
+      if (bytes < 1024) {
+        _cacheSize = '$bytes B';
+      } else if (bytes < 1024 * 1024) {
+        _cacheSize = '${(bytes / 1024).toStringAsFixed(1)} KB';
+      } else {
+        _cacheSize = '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      }
+    });
+  }
+
+  Future<void> _toggleAudioCache(bool value) async {
+    await VoiceSettings.setAudioCacheEnabled(value);
+    setState(() => _isAudioCacheEnabled = value);
+    if (!value) {
+      // Optional: Clear cache when disabling? No, let user decide.
+    }
+  }
+
+  Future<void> _clearAudioCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          'Clear Audio Cache?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'This will delete all downloaded voice files. They will be re-downloaded as needed.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear', style: TextStyle(color: neonGreen)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _ttsService.clearAudioCache();
+      await _updateCacheSize();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Audio cache cleared')));
+      }
+    }
   }
 
   Future<void> _loadVoices() async {
@@ -448,25 +513,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
 
           // Storage info footer
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.save, size: 14, color: Colors.grey[500]),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Preferences saved locally on device',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                  ),
+          const SizedBox(height: 20),
+          Container(height: 1, color: Colors.grey[800]),
+          const SizedBox(height: 16),
+
+          // Cache Controls
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Cache Audio',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Save voices to device ($_cacheSize)',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Switch(
+                value: _isAudioCacheEnabled,
+                onChanged: _toggleAudioCache,
+                activeColor: neonGreen,
+                activeTrackColor: neonGreen.withAlpha(50),
+                inactiveThumbColor: Colors.grey[400],
+                inactiveTrackColor: Colors.grey[800],
+              ),
+            ],
           ),
+
+          if (_isAudioCacheEnabled && _cacheSize != '0 B') ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: _clearAudioCache,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(20),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withAlpha(50)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.redAccent,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Clear Cache',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
 
           if (_errorMessage != null || _availableVoices.isEmpty)
             Padding(
