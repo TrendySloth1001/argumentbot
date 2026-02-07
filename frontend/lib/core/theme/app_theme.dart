@@ -144,3 +144,19 @@ class AppTheme {
     );
   }
 }
+
+
+/**
+ * 
+ * 2. 🗣️ Voice Debates (Podcast Mode)
+Turn text debates into audio.
+
+How: Use Text-to-Speech (ElevenLabs or OS default) to give Model A and Model B distinct voices.
+Cool Factor: Users can listen to debates like a podcast while driving or working.
+3. 🎭 Personality Matchups
+Let users pick the "vibe" of the debaters.
+
+Example: "Gen Z Zoomer" vs "Shakespearean Scholar"
+Example: "Angry Reddit Mod" vs "Chill Surfer"
+Cool Factor: Infinite entertainment value from clashing styles.
+ */

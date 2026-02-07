@@ -11,7 +11,11 @@ class DebateService {
 
   String get baseUrl => ApiConfig.baseUrl;
 
-  Future<Debate> startDebate(String topic) async {
+  Future<Debate> startDebate(
+    String topic, {
+    String mode = 'AI_VS_AI',
+    String userRole = 'SPECTATOR',
+  }) async {
     final token = await _storage.read(key: 'jwt_token');
     final response = await http.post(
       Uri.parse('$baseUrl/debate/start'),
@@ -19,7 +23,7 @@ class DebateService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({'topic': topic}),
+      body: jsonEncode({'topic': topic, 'mode': mode, 'userRole': userRole}),
     );
 
     if (response.statusCode == 201 || response.statusCode == 200) {
@@ -63,6 +67,24 @@ class DebateService {
       }
     } finally {
       client.close();
+    }
+  }
+
+  Future<DebateTurn> submitUserTurn(String debateId, String content) async {
+    final token = await _storage.read(key: 'jwt_token');
+    final response = await http.post(
+      Uri.parse('$baseUrl/debate/$debateId/user-turn'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'content': content}),
+    );
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return DebateTurn.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to submit turn: ${response.statusCode}');
     }
   }
 

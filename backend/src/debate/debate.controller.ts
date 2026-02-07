@@ -9,8 +9,13 @@ export class DebateController {
 
     @UseGuards(AuthGuard('jwt'))
     @Post('start')
-    async startDebate(@Body('topic') topic: string, @Req() req) {
-        return this.debateService.startDebate(topic, req.user.userId);
+    async startDebate(@Body('topic') topic: string, @Body('mode') mode: any, @Body('userRole') userRole: any, @Req() req) {
+        return this.debateService.startDebate(topic, req.user.userId, mode, userRole);
+    }
+
+    @Post(':id/user-turn')
+    async submitUserTurn(@Param('id') id: string, @Body('content') content: string) {
+        return this.debateService.submitUserTurn(id, content);
     }
 
     @Post(':id/next')
@@ -20,7 +25,7 @@ export class DebateController {
 
     @Get(':id/stream')
     async streamTurn(@Param('id') id: string, @Query('scoringMode') scoringMode: 'AI' | 'ALGO' = 'AI', @Res() res: Response) {
-        const { stream, debateId, speaker, topic, lastTurnContent, modelName } = await this.debateService.processTurnStream(id, scoringMode);
+        const { stream, debateId, speaker, topic, lastTurnContent, modelName, lastTurnConceded } = await this.debateService.processTurnStream(id, scoringMode);
 
         if (!stream) {
             res.end();
@@ -52,7 +57,7 @@ export class DebateController {
                         }
                         if (json.done) {
                             if (debateId && speaker && topic && lastTurnContent && modelName) {
-                                await this.debateService.saveTurn(debateId, speaker, fullContent, scoringMode, topic, lastTurnContent, modelName);
+                                await this.debateService.saveTurn(debateId, speaker, fullContent, scoringMode, topic, lastTurnContent, modelName, !!lastTurnConceded);
                             }
                             res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
                         }

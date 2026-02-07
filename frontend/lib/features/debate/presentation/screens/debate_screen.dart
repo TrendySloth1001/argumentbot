@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../data/models/debate.dart';
 import '../../data/services/debate_service.dart';
 import '../widgets/power_bar.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../../feed/presentation/widgets/share_debate_dialog.dart';
 
 class DebateScreen extends StatefulWidget {
@@ -20,6 +20,7 @@ class _DebateScreenState extends State<DebateScreen> {
   bool _isLoading = true;
   bool _isProcessingTurn = false;
   final ScrollController _scrollController = ScrollController();
+  final _turnController = TextEditingController();
 
   static const Color neonGreen = Color(0xFF00FF88);
   static const Color neonPurple = Color(0xFF8E2DE2);
@@ -29,6 +30,13 @@ class _DebateScreenState extends State<DebateScreen> {
   void initState() {
     super.initState();
     _loadDebate();
+  }
+
+  @override
+  void dispose() {
+    _turnController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDebate() async {
@@ -93,8 +101,49 @@ class _DebateScreenState extends State<DebateScreen> {
         );
       }
     } finally {
-      setState(() => _isProcessingTurn = false);
+      if (mounted) setState(() => _isProcessingTurn = false);
     }
+  }
+
+  Future<void> _submitUserTurn() async {
+    if (_turnController.text.trim().isEmpty) return;
+    final content = _turnController.text.trim();
+    _turnController.clear();
+
+    // Optimistically add turn
+    setState(() {
+      _debate!.turns.add(
+        DebateTurn(
+          id: 'user_pending',
+          speaker: 'USER',
+          content: content,
+          timestamp: DateTime.now(),
+          modelName: 'You',
+        ),
+      );
+    });
+    _scrollToBottom();
+
+    try {
+      // Send to backend
+      await _debateService.submitUserTurn(widget.debateId, content);
+
+      // Trigger AI response immediately
+      _nextTurn();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  bool get _isUserTurn {
+    if (_debate?.mode != 'USER_VS_AI') return false;
+    if (_debate!.turns.isEmpty) return _debate!.userRole == 'PRO';
+    // If last speaker was NOT user, it's user's turn
+    return _debate!.turns.last.speaker != 'USER';
   }
 
   void _scrollToBottom() {
@@ -144,6 +193,10 @@ class _DebateScreenState extends State<DebateScreen> {
           scoreB += p.toDouble();
         }
       }
+    }
+
+    if (_debate!.mode == 'USER_VS_AI' && _isUserTurn && !_isProcessingTurn) {
+      // Auto-focus logic could go here
     }
 
     return Scaffold(
@@ -277,6 +330,9 @@ class _DebateScreenState extends State<DebateScreen> {
   }
 
   Widget _buildMessageBubble(DebateTurn turn, bool isModelA) {
+    if (turn.speaker == 'USER') {
+      return _buildUserMessageBubble(turn);
+    }
     final color = isModelA ? neonPurple : neonBlue;
     final label = isModelA ? 'PROPONENT' : 'OPPONENT';
 
@@ -373,6 +429,69 @@ class _DebateScreenState extends State<DebateScreen> {
     );
   }
 
+  Widget _buildUserMessageBubble(DebateTurn turn) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24, left: 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: neonGreen.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: neonGreen.withOpacity(0.5)),
+            ),
+            child: const Text(
+              'YOU',
+              style: TextStyle(
+                color: neonGreen,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[900],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+              border: Border.all(color: Colors.grey[800]!),
+            ),
+            child: Text(
+              turn.content,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                height: 1.5,
+              ),
+            ),
+          ),
+          if (turn.analysis != null) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                if (turn.analysis!['persuasiveness'] != null)
+                  _buildTag(
+                    Icons.auto_graph,
+                    'Score: ${turn.analysis!['persuasiveness']}',
+                    neonGreen,
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildTag(IconData icon, String text, Color color) {
     return GestureDetector(
       onTap: () {
@@ -443,31 +562,120 @@ class _DebateScreenState extends State<DebateScreen> {
   Widget _buildBottomControl() {
     if (_debate!.status == 'FINISHED') {
       return Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: Colors.grey[900],
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.grey[800]!)),
         ),
-        child: Column(
+        child: Row(
           children: [
-            const Icon(Icons.check_circle, color: neonGreen, size: 40),
-            const SizedBox(height: 12),
+            const Icon(Icons.check_circle, color: neonGreen, size: 24),
+            const SizedBox(width: 12),
             const Text(
               'Debate Concluded',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 18,
                 fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'This session has ended.',
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () => _showResultsBottomSheet(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: neonGreen.withOpacity(0.2),
+                foregroundColor: neonGreen,
+                elevation: 0,
+                side: const BorderSide(color: neonGreen),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text('View Results'),
             ),
           ],
         ),
       );
+    }
+
+    if (_debate!.mode == 'USER_VS_AI') {
+      if (_isUserTurn) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.black,
+            border: Border(top: BorderSide(color: Colors.grey[900]!)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _turnController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: null,
+                  decoration: InputDecoration(
+                    hintText: 'Your argument...',
+                    hintStyle: TextStyle(color: Colors.grey[600]),
+                    filled: true,
+                    fillColor: Colors.grey[900],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: _submitUserTurn,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: neonGreen,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.send, color: Colors.black, size: 20),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        // AI is thinking or speaking
+        if (_isProcessingTurn) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            color: Colors.black,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      color: neonGreen,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Opponent is thinking...',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        // Fallback if not processing but not user turn? Should not happen often unless specific state.
+        // Maybe "Waiting..."
+        return Container();
+      }
     }
 
     return Container(
@@ -521,6 +729,178 @@ class _DebateScreenState extends State<DebateScreen> {
                 ),
         ),
       ),
+    );
+  }
+
+  void _showResultsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.grey[800]!)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[700],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Icon(Icons.emoji_events, color: Colors.amber, size: 48),
+            const SizedBox(height: 16),
+            const Text(
+              'DEBATE RESULT',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildScoreColumn(
+                  'PRO',
+                  _debate!.turns
+                          .where((t) => t.speaker == 'MODEL_A')
+                          .fold(
+                            0.0,
+                            (sum, t) =>
+                                sum + (t.analysis?['persuasiveness'] ?? 50),
+                          ) /
+                      (_debate!.turns
+                                  .where((t) => t.speaker == 'MODEL_A')
+                                  .length ==
+                              0
+                          ? 1
+                          : _debate!.turns
+                                .where((t) => t.speaker == 'MODEL_A')
+                                .length),
+                  neonPurple,
+                ),
+                Container(width: 1, height: 40, color: Colors.grey[800]),
+                _buildScoreColumn(
+                  'CON',
+                  _debate!.turns
+                          .where((t) => t.speaker != 'MODEL_A')
+                          .fold(
+                            0.0,
+                            (sum, t) =>
+                                sum + (t.analysis?['persuasiveness'] ?? 50),
+                          ) /
+                      (_debate!.turns
+                                  .where((t) => t.speaker != 'MODEL_A')
+                                  .length ==
+                              0
+                          ? 1
+                          : _debate!.turns
+                                .where((t) => t.speaker != 'MODEL_A')
+                                .length),
+                  neonBlue,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (_debate!.turns.isNotEmpty &&
+                _debate!.turns.last.analysis?['conceded'] == true)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.flag, color: Colors.redAccent, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_debate!.turns.last.speaker == 'USER' ? 'YOU' : _debate!.turns.last.modelName} CONCEDED',
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close sheet
+                  Navigator.pop(context); // Back to menu
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: neonGreen,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Exit Debate',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScoreColumn(String label, double score, Color color) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          score.toStringAsFixed(1),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 32,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'AVG SCORE',
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 10,
+            letterSpacing: 1,
+          ),
+        ),
+      ],
     );
   }
 }

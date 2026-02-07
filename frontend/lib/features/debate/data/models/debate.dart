@@ -3,6 +3,8 @@ class Debate {
   final String topic;
   final String status;
   final String? createdAt;
+  final String mode;
+  final String userRole;
   final List<DebateTurn> turns;
 
   Debate({
@@ -11,6 +13,8 @@ class Debate {
     required this.status,
     required this.turns,
     this.createdAt,
+    this.mode = 'AI_VS_AI',
+    this.userRole = 'SPECTATOR',
   });
 
   factory Debate.fromJson(Map<String, dynamic> json) {
@@ -19,6 +23,8 @@ class Debate {
       topic: json['topic'],
       status: json['status'],
       createdAt: json['createdAt'],
+      mode: json['mode'] ?? 'AI_VS_AI',
+      userRole: json['userRole'] ?? 'SPECTATOR',
       turns:
           (json['turns'] as List<dynamic>?)
               ?.map((e) => DebateTurn.fromJson(e))

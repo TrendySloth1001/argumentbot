@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { RagService } from '../rag/rag.service';
 import { ScoringService } from './scoring.service';
-import { DebateStatus, Speaker } from '@prisma/client';
+import { DebateStatus, Speaker, DebateMode, DebateRole } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 
@@ -76,20 +76,56 @@ export class DebateService {
         }
 
         const lastTurn = debate.turns[debate.turns.length - 1];
-        const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
+        let nextSpeaker: Speaker;
+
+        if (debate.mode === DebateMode.USER_VS_AI) {
+            // In User vs AI, last turn implies next speaker
+            if (lastTurn.speaker === Speaker.USER) {
+                // AI's turn
+                nextSpeaker = debate.userRole === DebateRole.PRO ? Speaker.MODEL_B : Speaker.MODEL_A;
+            } else {
+                // Waiting for user input
+                return { finished: true, waitingForUser: true };
+            }
+        } else {
+            nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
+        }
+
         const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'PROPONENT (defending the claim)' : 'OPPONENT (attacking the claim)';
         const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
         const context = await this.ragService.searchSimilar(lastTurn.content);
         const contextText = context.map((d) => d.content).join('\n');
 
-        // Build debate history for context
         const history = debate.turns.map(t =>
-            `${t.speaker === Speaker.MODEL_A ? 'PRO' : 'CON'}: ${t.content}`
+            `${t.speaker === Speaker.MODEL_A ? 'PRO' : (t.speaker === Speaker.MODEL_B ? 'CON' : 'USER')}: ${t.content}`
         ).join('\n\n');
 
-        const prompt = `
-You are the ${roleDescription} in a COMPETITIVE debate. You have a sharp wit and aren't afraid to roast your opponent.
+        let opponentDescription = 'ANOTHER AI MODEL';
+        if (debate.mode === DebateMode.USER_VS_AI) {
+            opponentDescription = 'THE USER (A REAL HUMAN)';
+        }
+
+        const lastTurnConceded = lastTurn.analysis && (lastTurn.analysis as any).conceded === true;
+
+        let prompt = '';
+        if (lastTurnConceded) {
+            prompt = `
+You are the ${roleDescription} in a COMPETITIVE debate.
+Your opponent (${opponentDescription}) has CONCEDED!
+
+Victory is yours.
+Give a short, witty, and slightly gloating victory speech.
+Be gracious but remind them why you won.
+UNDER 50 WORDS.
+NO META-COMMENTARY.
+`;
+        } else {
+            prompt = `
+You are the ${roleDescription} in a COMPETITIVE debate.
+Your opponent (${opponentDescription}) has CONCEDED! (Wait, no, this is the else block).
+You are debating against ${opponentDescription}. Your goal is to defeat them logically and rhetorically.
+
 Topic: "${debate.topic}"
 
 === DEBATE HISTORY ===
@@ -101,17 +137,16 @@ ${contextText}
 === YOUR PERSONALITY ===
 - You are confident, witty, and slightly sarcastic
 - You enjoy pointing out the absurdity in your opponent's logic
-- You use clever analogies and occasionally roast your opponent
-- You never insult personally - only their arguments (keep it classy)
-- Think of yourself as a debate champion with comedian timing
+- You use clever analogies and occasionally roast your opponent (argument based)
 
 === HARD RULES (VIOLATIONS = LOSS) ===
 1. STATE ONE EXPLICIT CLAIM: Make exactly ONE falsifiable claim with evidence
 2. NO VAGUE ABSTRACTIONS: "mystery/meaning/purpose" BANNED unless defined concretely
 3. ANSWER DIRECTLY: If asked a question, answer in ≤2 sentences FIRST
 4. ATTACK + ROAST: Point out a flaw AND add a witty comment about it
-5. NO AGREEMENT: You are rivals. Finding common ground = LOSING
-6. USE CONTEXT: You MUST reference the PROVIDED FACTS. Don't ignore them.
+5. NO AGREEMENT (UNLESS DEFEATED): You are rivals. Finding common ground = LOSING.
+6. CONCESSION ALLOWED: If your opponent's logic is undeniable and you are cornered, you MAY concede. (e.g., "You got me there.", "I yield.").
+7. USE CONTEXT: You MUST reference the PROVIDED FACTS. Don't ignore them.
 
 === BANNED PHRASES (INSTANT LOSS) ===
 - "It's a mystery / complex issue" (Cop-out)
@@ -140,6 +175,7 @@ ${contextText}
 - Roast their logic, not them personally
 - NO META-COMMENTARY: Do NOT include "Explanation:", "Analysis:", or notes. JUST the debate response.
 `;
+        }
 
         const stream = await this.llmService.generateStream(prompt, activeModel);
 
@@ -150,11 +186,12 @@ ${contextText}
             topic: debate.topic,
             lastTurnContent: lastTurn.content,
             scoringMode,
-            modelName: activeModel
+            modelName: activeModel,
+            lastTurnConceded // Pass this to controller so it can pass to saveTurn
         };
     }
 
-    async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string) {
+    async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string, lastTurnConceded: boolean = false) {
         const newTurn = await this.prisma.debateTurn.create({
             data: {
                 debateId,
@@ -165,6 +202,9 @@ ${contextText}
         });
 
         let analysis;
+        // If it's a victory speech (lastTurnConceded), maybe skip full analysis or give max score?
+        // But let's analyze anyway to see if AI messed up the victory speech.
+
         if (scoringMode === 'ALGO') {
             analysis = this.scoringService.calculateScore(content, topic);
         } else {
@@ -176,20 +216,74 @@ ${contextText}
             data: { analysis },
         });
 
+        // Check for Game Over conditions
+        const aiConceded = (analysis as any).conceded === true;
+
+        if (aiConceded || lastTurnConceded) {
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED }
+            });
+        }
+
         await this.cacheManager.del(`debate:${debateId}`);
         await this.cacheManager.del('debates:all');
 
         return newTurn;
     }
 
-    async startDebate(topic: string, userId?: string) {
+    async submitUserTurn(debateId: string, content: string) {
+        const debate = await this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: { orderBy: { timestamp: 'desc' }, take: 1 } }
+        });
+
+        if (!debate) throw new NotFoundException('Debate not found');
+        if (debate.status === DebateStatus.FINISHED) throw new Error('Debate finished');
+
+        // Save user turn
+        const newTurn = await this.prisma.debateTurn.create({
+            data: {
+                debateId,
+                speaker: Speaker.USER,
+                content,
+                modelName: 'User'
+            }
+        });
+
+        // Analyze user turn? Yes, let the judge score the user!
+        const lastTurnContent = debate.turns[0]?.content || '';
+        const analysis = await this.analyzeTurn(debate.topic, lastTurnContent, content);
+
+        await this.prisma.debateTurn.update({
+            where: { id: newTurn.id },
+            data: { analysis }
+        });
+
+        await this.cacheManager.del(`debate:${debateId}`);
+
+        return newTurn;
+    }
+
+    async startDebate(topic: string, userId?: string, mode: DebateMode = DebateMode.AI_VS_AI, userRole: DebateRole = DebateRole.SPECTATOR) {
         const debate = await this.prisma.debate.create({
             data: {
                 topic,
                 status: DebateStatus.ACTIVE,
                 userId: userId || null,
+                mode,
+                userRole
             },
         });
+
+        // If User vs AI and User is PRO, User speaks first.
+        // Return immediately, waiting for user input.
+        if (mode === DebateMode.USER_VS_AI && userRole === DebateRole.PRO) {
+            return debate;
+        }
+
+        // If AI vs AI OR (User vs AI and User is CON), AI starts (Proponent).
+        // Standard flow below.
 
         const context = await this.ragService.searchSimilar(topic);
         const contextText = context.map(c => c.content).join('\n');
@@ -226,7 +320,8 @@ NO EXPLANATION OR META-COMMENTARY. JUST THE RESPONSE.
         await this.prisma.debateTurn.create({
             data: {
                 debateId: debate.id,
-                speaker: Speaker.MODEL_A,
+                speaker: Speaker.MODEL_A, // AI is always Model A (Pro) or Model B (Con). Or keep it simple.
+                // In User vs AI (User=Con), AI is Pro (Model A). Correct.
                 content: response,
                 modelName: 'llama3.2'
             },
@@ -257,7 +352,22 @@ NO EXPLANATION OR META-COMMENTARY. JUST THE RESPONSE.
         }
 
         const lastTurn = debate.turns[debate.turns.length - 1];
-        const nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
+        let nextSpeaker: Speaker;
+
+        if (debate.mode === DebateMode.USER_VS_AI) {
+            if (lastTurn.speaker === Speaker.USER) {
+                nextSpeaker = debate.userRole === DebateRole.PRO ? Speaker.MODEL_B : Speaker.MODEL_A;
+            } else {
+                // Wait for user or error?
+                // If last speaker was AI, we shouldn't be processing AI turn again unless retrying.
+                // For now assume caller checked.
+                // Or force AI vs AI logic if something weird happens.
+                nextSpeaker = debate.userRole === DebateRole.PRO ? Speaker.MODEL_B : Speaker.MODEL_A;
+            }
+        } else {
+            nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
+        }
+
         const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'PROPONENT (defending)' : 'OPPONENT (attacking)';
         const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
@@ -268,8 +378,30 @@ NO EXPLANATION OR META-COMMENTARY. JUST THE RESPONSE.
             `${t.speaker === Speaker.MODEL_A ? 'PRO' : 'CON'}: ${t.content}`
         ).join('\n\n');
 
-        const prompt = `
-You are the ${roleDescription} in a COMPETITIVE debate. You have sharp wit and love to roast your opponent's arguments.
+        let opponentDescription = 'ANOTHER AI MODEL';
+        if (debate.mode === DebateMode.USER_VS_AI) {
+            opponentDescription = 'THE USER (A REAL HUMAN)';
+        }
+
+        const lastTurnConceded = lastTurn.analysis && (lastTurn.analysis as any).conceded === true;
+
+        let prompt = '';
+        if (lastTurnConceded) {
+            prompt = `
+You are the ${roleDescription} in a COMPETITIVE debate.
+Your opponent (${opponentDescription}) has CONCEDED!
+
+Victory is yours.
+Give a short, witty, and slightly gloating victory speech.
+Be gracious but remind them why you won.
+UNDER 50 WORDS.
+NO META-COMMENTARY.
+`;
+        } else {
+            prompt = `
+You are the ${roleDescription} in a COMPETITIVE debate.
+You are debating against ${opponentDescription}. Your goal is to defeat them logically and rhetorically.
+
 Topic: "${debate.topic}"
 
 === DEBATE HISTORY ===
@@ -279,41 +411,12 @@ ${history}
 ${contextText}
 
 === YOUR PERSONALITY ===
-- Confident, witty, slightly sarcastic
-- You enjoy exposing the absurdity in opponent's logic
-- Use clever analogies and occasional roasts
-- Attack arguments, not the person (keep it classy)
-
-=== RULES (VIOLATIONS = LOSS) ===
-1. ONE CLAIM: State exactly ONE falsifiable claim with evidence
-2. NO VAGUENESS: "mystery/meaning/purpose" BANNED without concrete definition
-3. ANSWER FIRST: If asked a question, answer in ≤2 sentences
-4. ATTACK + ROAST: Find a flaw AND add a witty comment
-5. NO AGREEMENT: You are rivals
-6. USE CONTEXT: Reference facts from the PROVIDED CONTEXT.
-
-=== BANNED PHRASES (INSTANT LOSS) ===
-- "Mystery / complex / nuance" (without definition)
-- "Balance / Middle ground" (Weak)
-- "Subjective meaning" (Vague)
-- "Interconnected" (Lazy)
-
-=== FORMAT ===
-## Answer
-[Direct answer if question was asked]
-
-## Claim
-[ONE falsifiable claim with attitude]
-
-## Attack
-[ONE weakness + clever roast or analogy]
-
-## Question
 [ONE pointed question to put them on the spot]
 
 UNDER 100 WORDS. Be sharp, witty, confident. Roast their logic!
 NO META-COMMENTARY. NO "Explanation:". JUST THE RESPONSE.
 `;
+        }
 
         const responseContent = await this.llmService.generateResponse(prompt, activeModel);
 
@@ -337,6 +440,20 @@ NO META-COMMENTARY. NO "Explanation:". JUST THE RESPONSE.
             where: { id: newTurn.id },
             data: { analysis },
         });
+
+        // Check for Game Over conditions
+        const aiConceded = (analysis as any).conceded === true;
+
+        if (aiConceded || lastTurnConceded) {
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED }
+            });
+            return this.prisma.debate.findUnique({
+                where: { id: debateId },
+                include: { turns: { orderBy: { timestamp: 'asc' } } },
+            });
+        }
 
         await this.cacheManager.del(`debate:${debateId}`);
         await this.cacheManager.del('debates:all');
@@ -381,6 +498,11 @@ Response: "${response}"
 5. NON-ANSWER PENALTY (-50):
    - Did not directly address the opponent's question with a Yes/No/Because statement.
 
+=== VICTORY CHECK (INSTANT END) ===
+- Did the speaker EXPLICITLY concede? e.g. "I quit", "You're right", "I give up".
+- Did they refuse to continue arguing?
+- -> Set "conceded": true
+
 === OUTPUT ===
 Return ONLY valid JSON:
 {
@@ -390,7 +512,8 @@ Return ONLY valid JSON:
     "attack_score": <number 0-100>,
     "vagueness_penalty": <number, negative>,
     "key_point": "<one sentence summary of their main claim>",
-    "weakness": "<one sentence describing the biggest flaw>"
+    "weakness": "<one sentence describing the biggest flaw>",
+    "conceded": <boolean, true if they gave up>
 }
 `;
 
@@ -414,7 +537,8 @@ Return ONLY valid JSON:
                 attack_score: 50,
                 vagueness_penalty: 0,
                 key_point: "Analysis unavailable",
-                weakness: "Could not analyze"
+                weakness: "Could not analyze",
+                conceded: false
             };
         }
     }

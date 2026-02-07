@@ -31,11 +31,14 @@ model Document {
   createdAt DateTime               @default(now())
 }
 
+
 model Debate {
   id        String       @id @default(uuid())
   topic     String
   status    DebateStatus @default(ACTIVE)
-  userId    String?      // Owner of debate (null for legacy)
+  mode      DebateMode   @default(AI_VS_AI)
+  userRole  DebateRole   @default(SPECTATOR)
+  userId    String?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   turns     DebateTurn[]
@@ -116,4 +119,16 @@ enum DebateStatus {
 enum Speaker {
   MODEL_A
   MODEL_B
+  USER
+}
+
+enum DebateMode {
+  AI_VS_AI
+  USER_VS_AI
+}
+
+enum DebateRole {
+  PRO
+  CON
+  SPECTATOR
 }
