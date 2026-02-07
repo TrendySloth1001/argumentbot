@@ -41,7 +41,7 @@ export class FeedService {
                 author: { select: { username: true, avatarUrl: true } },
                 debate: {
                     include: {
-                        turns: { take: 1, orderBy: { timestamp: 'desc' } } // Preview last turn
+                        turns: { orderBy: { timestamp: 'asc' } } // Return all turns
                     }
                 },
             },

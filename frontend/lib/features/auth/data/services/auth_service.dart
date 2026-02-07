@@ -54,6 +54,7 @@ class AuthService {
           email: data['email'],
           username: data['username'] ?? 'User',
           createdAt: '',
+          avatarUrl: data['avatarUrl'],
         );
       }
       return null;

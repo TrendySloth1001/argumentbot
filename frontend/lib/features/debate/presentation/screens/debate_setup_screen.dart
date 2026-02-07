@@ -3,14 +3,16 @@ import '../../data/services/debate_service.dart';
 import 'debate_screen.dart';
 
 class DebateSetupScreen extends StatefulWidget {
-  const DebateSetupScreen({super.key});
+  final String? initialTopic;
+
+  const DebateSetupScreen({super.key, this.initialTopic});
 
   @override
   State<DebateSetupScreen> createState() => _DebateSetupScreenState();
 }
 
 class _DebateSetupScreenState extends State<DebateSetupScreen> {
-  final _topicController = TextEditingController();
+  late TextEditingController _topicController;
   final _debateService = DebateService();
   bool _isLoading = false;
   String _selectedMode = 'AI_VS_AI';
@@ -25,6 +27,18 @@ class _DebateSetupScreenState extends State<DebateSetupScreen> {
     'Space exploration cost',
     'Veganism is the future',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _topicController = TextEditingController(text: widget.initialTopic);
+  }
+
+  @override
+  void dispose() {
+    _topicController.dispose();
+    super.dispose();
+  }
 
   void _startDebate() async {
     if (_topicController.text.isEmpty) return;
