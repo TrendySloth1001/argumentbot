@@ -19,6 +19,8 @@ const rag_module_1 = require("./rag/rag.module");
 const debate_module_1 = require("./debate/debate.module");
 const feed_module_1 = require("./feed/feed.module");
 const policy_module_1 = require("./policy/policy.module");
+const tts_module_1 = require("./tts/tts.module");
+const storage_module_1 = require("./storage/storage.module");
 const cache_manager_1 = require("@nestjs/cache-manager");
 let AppModule = class AppModule {
 };
@@ -28,6 +30,7 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({ isGlobal: true }),
             cache_manager_1.CacheModule.register({ isGlobal: true }),
+            storage_module_1.StorageModule,
             users_module_1.UsersModule,
             auth_module_1.AuthModule,
             prisma_module_1.PrismaModule,
@@ -36,6 +39,7 @@ exports.AppModule = AppModule = __decorate([
             debate_module_1.DebateModule,
             feed_module_1.FeedModule,
             policy_module_1.PolicyModule,
+            tts_module_1.TtsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

@@ -1,6 +1,11 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../data/models/debate.dart';
+import '../../../../core/services/tts_service.dart';
 
 class DebateTurnItem extends StatefulWidget {
   final DebateTurn turn;
@@ -13,6 +18,72 @@ class DebateTurnItem extends StatefulWidget {
 }
 
 class _DebateTurnItemState extends State<DebateTurnItem> {
+  final TtsService _ttsService = TtsService();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  bool _isPlaying = false;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _playAudio() async {
+    if (_isLoading) return;
+
+    // If already playing, stop
+    if (_isPlaying) {
+      await _audioPlayer.stop();
+      setState(() => _isPlaying = false);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Get audio from TTS service
+      final Uint8List audioBytes = await _ttsService.synthesize(
+        widget.turn.content,
+      );
+
+      // Save to temp file (just_audio needs a file or URL)
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(
+        '${tempDir.path}/tts_${widget.turn.id}_${DateTime.now().millisecondsSinceEpoch}.wav',
+      );
+      await tempFile.writeAsBytes(audioBytes);
+
+      // Play audio
+      await _audioPlayer.setFilePath(tempFile.path);
+
+      setState(() {
+        _isLoading = false;
+        _isPlaying = true;
+      });
+
+      _audioPlayer.playerStateStream.listen((state) {
+        if (state.processingState == ProcessingState.completed) {
+          if (mounted) {
+            setState(() => _isPlaying = false);
+          }
+          // Clean up temp file
+          tempFile.delete().catchError((_) => tempFile);
+        }
+      });
+
+      await _audioPlayer.play();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('TTS Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -53,6 +124,41 @@ class _DebateTurnItemState extends State<DebateTurnItem> {
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
                       ),
+                    ),
+                  ),
+                  const Spacer(),
+                  // Speaker Button
+                  GestureDetector(
+                    onTap: _playAudio,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _isPlaying
+                            ? const Color(0xFF00FF88).withAlpha(30)
+                            : Colors.white10,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _isPlaying
+                              ? const Color(0xFF00FF88).withAlpha(80)
+                              : Colors.white24,
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF00FF88),
+                              ),
+                            )
+                          : Icon(
+                              _isPlaying ? Icons.stop : Icons.volume_up,
+                              size: 16,
+                              color: _isPlaying
+                                  ? const Color(0xFF00FF88)
+                                  : Colors.grey[400],
+                            ),
                     ),
                   ),
                 ],

@@ -18,6 +18,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _scoringMode = 'AI';
   bool _isLoading = true;
 
+  // Server status states
+  Map<String, String> _serverStatus = {
+    'backend': 'unknown',
+    'tts': 'unknown',
+    'minio': 'unknown',
+  };
+  bool _isCheckingStatus = false;
+
   // Theme colors
   static const Color neonGreen = Color(0xFF00FF88);
 
@@ -41,6 +49,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _scoringMode = newMode);
   }
 
+  Future<void> _checkAllServerStatus() async {
+    setState(() => _isCheckingStatus = true);
+
+    // Check Backend
+    try {
+      final backendResponse = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/'))
+          .timeout(const Duration(seconds: 5));
+      setState(
+        () => _serverStatus['backend'] = backendResponse.statusCode == 200
+            ? 'online'
+            : 'error',
+      );
+    } catch (e) {
+      setState(() => _serverStatus['backend'] = 'offline');
+    }
+
+    // Check TTS Service
+    try {
+      final ttsResponse = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/tts/health'))
+          .timeout(const Duration(seconds: 5));
+      if (ttsResponse.statusCode == 200) {
+        final data = jsonDecode(ttsResponse.body);
+        setState(
+          () => _serverStatus['tts'] = data['status'] == 'healthy'
+              ? 'online'
+              : 'error',
+        );
+      } else {
+        setState(() => _serverStatus['tts'] = 'error');
+      }
+    } catch (e) {
+      setState(() => _serverStatus['tts'] = 'offline');
+    }
+
+    // Check MinIO (via backend proxy or direct)
+    try {
+      // MinIO console runs on port 9001, we check if responsive
+      final minioUrl = ApiConfig.baseUrl
+          .replaceAll(':3000', ':9001')
+          .replaceAll(':3001', ':9001');
+      final minioResponse = await http
+          .get(Uri.parse(minioUrl))
+          .timeout(const Duration(seconds: 5));
+      setState(
+        () => _serverStatus['minio'] = minioResponse.statusCode < 500
+            ? 'online'
+            : 'error',
+      );
+    } catch (e) {
+      setState(() => _serverStatus['minio'] = 'offline');
+    }
+
+    setState(() => _isCheckingStatus = false);
+  }
+
   Future<void> _openGitHub() async {
     final uri = Uri.parse('https://github.com/TrendySloth1001/argumentbot');
     try {
@@ -58,6 +123,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const PolicyPage()),
+    );
+  }
+
+  Widget _buildServerStatusCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.dns, color: neonGreen, size: 22),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Server Status',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Check all service health',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: _isCheckingStatus ? null : _checkAllServerStatus,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _isCheckingStatus ? Colors.grey[700] : neonGreen,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: _isCheckingStatus
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.black,
+                          ),
+                        )
+                      : const Text(
+                          'Check',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildServerStatusRow('Backend API', 'backend', Icons.api),
+          const SizedBox(height: 8),
+          _buildServerStatusRow('TTS Service', 'tts', Icons.record_voice_over),
+          const SizedBox(height: 8),
+          _buildServerStatusRow('MinIO Storage', 'minio', Icons.storage),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServerStatusRow(String name, String key, IconData icon) {
+    final status = _serverStatus[key] ?? 'unknown';
+    Color statusColor;
+    IconData statusIcon;
+
+    switch (status) {
+      case 'online':
+        statusColor = neonGreen;
+        statusIcon = Icons.check_circle;
+        break;
+      case 'offline':
+        statusColor = Colors.red;
+        statusIcon = Icons.cancel;
+        break;
+      case 'error':
+        statusColor = Colors.orange;
+        statusIcon = Icons.warning;
+        break;
+      default:
+        statusColor = Colors.grey;
+        statusIcon = Icons.help_outline;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey[400], size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+          Icon(statusIcon, color: statusColor, size: 18),
+          const SizedBox(width: 6),
+          Text(
+            status.toUpperCase(),
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -83,6 +278,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
+                    _buildDivider(),
+                    const SizedBox(height: 24),
+
+                    // Server Status
+                    _buildSectionTitle('System'),
+                    const SizedBox(height: 12),
+                    _buildServerStatusCard(),
+
+                    const SizedBox(height: 24),
                     _buildDivider(),
                     const SizedBox(height: 24),
 

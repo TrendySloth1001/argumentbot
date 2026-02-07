@@ -1,9 +1,14 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../data/models/debate.dart';
 import '../../data/services/debate_service.dart';
 import '../widgets/power_bar.dart';
 import '../../../feed/presentation/widgets/share_debate_dialog.dart';
+import '../../../../core/services/tts_service.dart';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -16,11 +21,17 @@ class DebateScreen extends StatefulWidget {
 
 class _DebateScreenState extends State<DebateScreen> {
   final _debateService = DebateService();
+  final _ttsService = TtsService();
+  final Map<String, AudioPlayer> _audioPlayers = {};
   Debate? _debate;
   bool _isLoading = true;
   bool _isProcessingTurn = false;
   final ScrollController _scrollController = ScrollController();
   final _turnController = TextEditingController();
+
+  // TTS state per turn
+  final Map<String, bool> _playingTurns = {};
+  final Map<String, bool> _loadingTurns = {};
 
   static const Color neonGreen = Color(0xFF00FF88);
   static const Color neonPurple = Color(0xFF8E2DE2);
@@ -36,7 +47,86 @@ class _DebateScreenState extends State<DebateScreen> {
   void dispose() {
     _turnController.dispose();
     _scrollController.dispose();
+    for (final player in _audioPlayers.values) {
+      player.dispose();
+    }
     super.dispose();
+  }
+
+  // Strip markdown for natural TTS reading
+  String _stripMarkdown(String text) {
+    return text
+        // Remove headers (# ## ### etc)
+        .replaceAll(RegExp(r'^#{1,6}\s*', multiLine: true), '')
+        // Remove bold/italic markers
+        .replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1')
+        .replaceAll(RegExp(r'\*([^*]+)\*'), r'$1')
+        .replaceAll(RegExp(r'__([^_]+)__'), r'$1')
+        .replaceAll(RegExp(r'_([^_]+)_'), r'$1')
+        // Remove inline code
+        .replaceAll(RegExp(r'`([^`]+)`'), r'$1')
+        // Remove links but keep text
+        .replaceAll(RegExp(r'\[([^\]]+)\]\([^)]+\)'), r'$1')
+        // Remove bullet points
+        .replaceAll(RegExp(r'^[\s]*[-*+]\s+', multiLine: true), '')
+        // Remove numbered lists
+        .replaceAll(RegExp(r'^[\s]*\d+\.\s+', multiLine: true), '')
+        // Remove blockquotes
+        .replaceAll(RegExp(r'^>\s*', multiLine: true), '')
+        // Clean up extra whitespace
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
+  Future<void> _playTurnAudio(String turnId, String content) async {
+    if (_loadingTurns[turnId] == true) return;
+
+    // If already playing, stop
+    if (_playingTurns[turnId] == true) {
+      await _audioPlayers[turnId]?.stop();
+      setState(() => _playingTurns[turnId] = false);
+      return;
+    }
+
+    setState(() => _loadingTurns[turnId] = true);
+
+    try {
+      // Strip markdown before TTS
+      final cleanContent = _stripMarkdown(content);
+      final Uint8List audioBytes = await _ttsService.synthesize(cleanContent);
+
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(
+        '${tempDir.path}/tts_${turnId}_${DateTime.now().millisecondsSinceEpoch}.wav',
+      );
+      await tempFile.writeAsBytes(audioBytes);
+
+      _audioPlayers[turnId] ??= AudioPlayer();
+      await _audioPlayers[turnId]!.setFilePath(tempFile.path);
+
+      setState(() {
+        _loadingTurns[turnId] = false;
+        _playingTurns[turnId] = true;
+      });
+
+      _audioPlayers[turnId]!.playerStateStream.listen((state) {
+        if (state.processingState == ProcessingState.completed) {
+          if (mounted) {
+            setState(() => _playingTurns[turnId] = false);
+          }
+          tempFile.delete().catchError((_) => tempFile);
+        }
+      });
+
+      await _audioPlayers[turnId]!.play();
+    } catch (e) {
+      setState(() => _loadingTurns[turnId] = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('TTS Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Future<void> _loadDebate() async {
@@ -372,6 +462,43 @@ class _DebateScreenState extends State<DebateScreen> {
                 child: Text(
                   turn.modelName ?? 'Llama 3.2',
                   style: TextStyle(color: Colors.grey[500], fontSize: 10),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Speaker Button
+              GestureDetector(
+                onTap: () => _playTurnAudio(turn.id, turn.content),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: _playingTurns[turn.id] == true
+                        ? neonGreen.withAlpha(30)
+                        : Colors.grey[900],
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _playingTurns[turn.id] == true
+                          ? neonGreen.withAlpha(80)
+                          : Colors.grey[700]!,
+                    ),
+                  ),
+                  child: _loadingTurns[turn.id] == true
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: neonGreen,
+                          ),
+                        )
+                      : Icon(
+                          _playingTurns[turn.id] == true
+                              ? Icons.stop
+                              : Icons.volume_up,
+                          size: 14,
+                          color: _playingTurns[turn.id] == true
+                              ? neonGreen
+                              : Colors.grey[400],
+                        ),
                 ),
               ),
             ],
