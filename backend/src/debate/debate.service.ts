@@ -38,8 +38,25 @@ export class DebateService {
 
         const debates = await this.prisma.debate.findMany({
             orderBy: { createdAt: 'desc' },
-            include: {
-                turns: { take: 1, orderBy: { timestamp: 'desc' } }
+            select: {
+                id: true,
+                topic: true,
+                status: true,
+                mode: true,
+                userRole: true,
+                createdAt: true,
+                updatedAt: true,
+                userId: true,
+                turns: {
+                    take: 1,
+                    orderBy: { timestamp: 'desc' },
+                    select: {
+                        speaker: true,
+                        content: true,
+                        timestamp: true,
+                        modelName: true
+                    }
+                }
             }
         });
 
@@ -55,8 +72,25 @@ export class DebateService {
         const debates = await this.prisma.debate.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
-            include: {
-                turns: { take: 1, orderBy: { timestamp: 'desc' } }
+            select: {
+                id: true,
+                topic: true,
+                status: true,
+                mode: true,
+                userRole: true,
+                createdAt: true,
+                updatedAt: true,
+                userId: true,
+                turns: {
+                    take: 1,
+                    orderBy: { timestamp: 'desc' },
+                    select: {
+                        speaker: true,
+                        content: true,
+                        timestamp: true,
+                        modelName: true
+                    }
+                }
             }
         });
 

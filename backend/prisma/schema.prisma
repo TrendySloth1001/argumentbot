@@ -47,6 +47,7 @@ model Debate {
   @@index([status])
   @@index([updatedAt])
   @@index([userId])
+  @@index([createdAt])
 }
 
 model DebateTurn {
