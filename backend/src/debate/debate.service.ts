@@ -51,10 +51,12 @@ export class DebateService {
                     take: 1,
                     orderBy: { timestamp: 'desc' },
                     select: {
+                        id: true,
                         speaker: true,
                         content: true,
                         timestamp: true,
-                        modelName: true
+                        modelName: true,
+                        analysis: true
                     }
                 }
             }
@@ -85,10 +87,12 @@ export class DebateService {
                     take: 1,
                     orderBy: { timestamp: 'desc' },
                     select: {
+                        id: true,
                         speaker: true,
                         content: true,
                         timestamp: true,
-                        modelName: true
+                        modelName: true,
+                        analysis: true
                     }
                 }
             }
