@@ -1,4 +1,4 @@
-# MrArgue
+    # MrArgue
 
 **AI Debate Simulator** - A real-time adversarial debate system where two Large Language Models argue opposing positions on any topic, scored by an impartial AI judge.
 
@@ -28,7 +28,6 @@ MrArgue pits two locally-hosted LLMs against each other in structured debates. E
 
 ### Key Differentiators
 
-
 - **Adversarial by design**: Prompts enforce falsifiable claims and penalize vague abstractions
 - **RAG-enhanced**: Retrieval-augmented generation provides factual context
 - **Dual scoring modes**: AI judge or algorithmic heuristics
@@ -38,25 +37,7 @@ MrArgue pits two locally-hosted LLMs against each other in structured debates. E
 
 ## System Architecture
 
-```
-                                 +-------------------+
-                                 |      Ollama       |
-                                 |  +-----------+    |
-                                 |  | Llama 3.2 |    |  (Proponent)
-                                 |  +-----------+    |
-                                 |  | Gemma 2:2b|    |  (Opponent)
-                                 |  +-----------+    |
-                                 |  |nomic-embed|    |  (RAG Embeddings)
-                                 |  +-----------+    |
-                                 +--------^----------+
-                                          |
-+------------------+              +-------v--------+              +-------------+
-|                  |   REST API   |                |   Prisma    |             |
-|  Flutter Mobile  +<------------>+  NestJS API    +<----------->+   SQLite    |
-|     Client       |     JSON     |    Server      |     ORM     |  Database   |
-|                  |              |                |             |             |
-+------------------+              +----------------+              +-------------+
-```
+![System Architecture](file:///Users/nick/.gemini/antigravity/brain/fbaa8d72-728d-4102-a10d-634a6129c37c/architecture_diagram_1770488375912.png)
 
 ---
 
@@ -76,6 +57,7 @@ MrArgue pits two locally-hosted LLMs against each other in structured debates. E
 | **Auth** | JWT Authentication | Stateless token-based auth |
 | | User Registration | Email/password with Argon2 hashing |
 | | Profile Management | Avatar selection, nickname/age |
+| | **Persistent Auth** | "Remember Me" session persistence (7 days) |
 | **Social** | Community Feed | Posts with like functionality |
 | | Debate Sharing | Share results link generation |
 | **UI** | Dark Theme | Black + neon green aesthetic |
@@ -364,32 +346,15 @@ docker-compose up -d
 
 ## Project Structure
 
-```
-argumentbot/
-+-- backend/
-|   +-- src/
-|   |   +-- auth/           # Authentication module
-|   |   +-- debate/         # Debate logic and scoring
-|   |   +-- feed/           # Social feed module
-|   |   +-- llm/            # Ollama integration
-|   |   +-- prisma/         # Database service
-|   |   +-- rag/            # Retrieval-augmented generation
-|   +-- prisma/
-|   |   +-- schema.prisma   # Database schema
-|   +-- Dockerfile
-|   +-- docker-compose.yml
-+-- frontend/
-|   +-- lib/
-|   |   +-- core/           # Config, theme, utilities
-|   |   +-- features/       # Feature modules
-|   |       +-- auth/       # Login, registration
-|   |       +-- debate/     # Debate screens
-|   |       +-- feed/       # Social feed
-|   |       +-- home/       # Home screen
-|   |       +-- profile/    # User profile
-|   |       +-- settings/   # App settings
-+-- README.md
-```
+![Directory Structure](file:///Users/nick/.gemini/antigravity/brain/fbaa8d72-728d-4102-a10d-634a6129c37c/directory_structure_diagram_1770488393704.png)
+
+---
+
+## ⚠️ Known Issues
+
+- **Karaoke Sync**: The text highlighting in Karaoke mode involves estimating word duration based on character count. This may occasionally drift slightly from the actual audio playback, especially with faster voice models.
+- **Emulator Audio**: Audio playback latency can be higher on Android Emulators/iOS Simulators compared to physical devices.
+- **First-Time Load**: The first synthesis request for a specific phrase may have slight latency as the backend initializes the stream; subsequent requests are cached.
 
 ---
 
