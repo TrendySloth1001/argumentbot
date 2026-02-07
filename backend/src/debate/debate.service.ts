@@ -111,6 +111,14 @@ ${contextText}
 3. ANSWER DIRECTLY: If asked a question, answer in ≤2 sentences FIRST
 4. ATTACK + ROAST: Point out a flaw AND add a witty comment about it
 5. NO AGREEMENT: You are rivals. Finding common ground = LOSING
+6. USE CONTEXT: You MUST reference the PROVIDED FACTS. Don't ignore them.
+
+=== BANNED PHRASES (INSTANT LOSS) ===
+- "It's a mystery / complex issue" (Cop-out)
+- "We must find a balance" (Weak)
+- "Meaning is subjective" (Vague)
+- "Interconnected / Nuanced" (Unless defined concretely)
+- "Let's agree to disagree" (BANNED)
 
 === REQUIRED FORMAT ===
 ## Direct Answer
@@ -130,6 +138,7 @@ ${contextText}
 - Be sharp, witty, confident
 - Use humor and clever comparisons
 - Roast their logic, not them personally
+- NO META-COMMENTARY: Do NOT include "Explanation:", "Analysis:", or notes. JUST the debate response.
 `;
 
         const stream = await this.llmService.generateStream(prompt, activeModel);
@@ -208,6 +217,8 @@ Format:
 **Claim:** [Your bold, falsifiable claim]
 **Evidence:** [One concrete fact/example]
 **Challenge:** [Provocative question with some swagger]
+
+NO EXPLANATION OR META-COMMENTARY. JUST THE RESPONSE.
 `;
 
         const response = await this.llmService.generateResponse(prompt);
@@ -279,6 +290,13 @@ ${contextText}
 3. ANSWER FIRST: If asked a question, answer in ≤2 sentences
 4. ATTACK + ROAST: Find a flaw AND add a witty comment
 5. NO AGREEMENT: You are rivals
+6. USE CONTEXT: Reference facts from the PROVIDED CONTEXT.
+
+=== BANNED PHRASES (INSTANT LOSS) ===
+- "Mystery / complex / nuance" (without definition)
+- "Balance / Middle ground" (Weak)
+- "Subjective meaning" (Vague)
+- "Interconnected" (Lazy)
 
 === FORMAT ===
 ## Answer
@@ -294,6 +312,7 @@ ${contextText}
 [ONE pointed question to put them on the spot]
 
 UNDER 100 WORDS. Be sharp, witty, confident. Roast their logic!
+NO META-COMMENTARY. NO "Explanation:". JUST THE RESPONSE.
 `;
 
         const responseContent = await this.llmService.generateResponse(prompt, activeModel);
@@ -354,9 +373,13 @@ Response: "${response}"
    - 0: Agreed or didn't challenge
 
 4. VAGUENESS PENALTY (-30 for each):
-   - Used "mystery/meaning/purpose/interconnected" without definition
-   - Made unfalsifiable claims
+   - Used "mystery/meaning/purpose/interconnected" without concrete definition
+   - Made unfalsifiable claims (e.g. "it's too complex to know")
    - Asked rhetorical questions instead of pointed ones
+   - Failed to use provided context/facts (if applicable)
+
+5. NON-ANSWER PENALTY (-50):
+   - Did not directly address the opponent's question with a Yes/No/Because statement.
 
 === OUTPUT ===
 Return ONLY valid JSON:
@@ -373,10 +396,17 @@ Return ONLY valid JSON:
 
         try {
             const jsonStr = await this.llmService.generateResponse(prompt, 'llama3.2');
-            const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(cleanJson);
+
+            // Extract JSON object using regex to handle potential markdown or extra text
+            const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                console.error('No JSON found in analysis response:', jsonStr);
+                throw new Error('No JSON found');
+            }
+
+            return JSON.parse(jsonMatch[0]);
         } catch (e) {
-            console.error('Analysis failed', e);
+            console.error('Analysis parsing failed:', e);
             return {
                 persuasiveness: 50,
                 claim_score: 50,

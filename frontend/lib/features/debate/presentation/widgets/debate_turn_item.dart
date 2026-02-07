@@ -146,27 +146,28 @@ class _AnalysisTagState extends State<AnalysisTag> {
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: widget.color.withOpacity(0.3)),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(widget.icon, color: widget.color, size: 12),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                widget.text,
+        child: Text.rich(
+          TextSpan(
+            children: [
+              WidgetSpan(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(widget.icon, size: 12, color: widget.color),
+                ),
+                alignment: PlaceholderAlignment.middle,
+              ),
+              TextSpan(
+                text: widget.text,
                 style: TextStyle(
                   color: widget.color,
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                 ),
-                maxLines: _isExpanded ? null : 1,
-                overflow: _isExpanded
-                    ? TextOverflow.visible
-                    : TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
+          maxLines: _isExpanded ? null : 1,
+          overflow: _isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
         ),
       ),
     );
