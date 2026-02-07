@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/api_config.dart';
 import '../../../../core/data/settings_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/debate.dart';
 
 class DebateService {
@@ -126,19 +127,52 @@ class DebateService {
 
   Future<List<Debate>> getDebates() async {
     final token = await _storage.read(key: 'jwt_token');
-    final response = await http.get(
-      Uri.parse('$baseUrl/debate'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/debate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => Debate.fromJson(json)).toList();
-    } else {
-      throw Exception('Failed to load debates: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final debates = data.map((json) => Debate.fromJson(json)).toList();
+        await _cacheDebates(debates);
+        return debates;
+      } else {
+        throw Exception('Failed to load debates: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Network error, trying cache: $e');
+      final cached = await _loadCachedDebates();
+      if (cached.isNotEmpty) return cached;
+      rethrow;
     }
+  }
+
+  Future<void> _cacheDebates(List<Debate> debates) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = debates.map((d) => d.toJson()).toList();
+      await prefs.setString('cached_debates', jsonEncode(jsonList));
+    } catch (e) {
+      print('Failed to cache debates: $e');
+    }
+  }
+
+  Future<List<Debate>> _loadCachedDebates() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString('cached_debates');
+      if (jsonString != null) {
+        final List<dynamic> data = jsonDecode(jsonString);
+        return data.map((json) => Debate.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Failed to load cached debates: $e');
+    }
+    return [];
   }
 }

@@ -32,6 +32,17 @@ class Debate {
           [],
     );
   }
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'topic': topic,
+      'status': status,
+      'createdAt': createdAt,
+      'mode': mode,
+      'userRole': userRole,
+      'turns': turns.map((t) => t.toJson()).toList(),
+    };
+  }
 }
 
 class DebateTurn {
@@ -62,5 +73,16 @@ class DebateTurn {
       modelName: json['modelName'],
       timestamp: DateTime.parse(json['timestamp']),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'speaker': speaker,
+      'content': content,
+      'analysis': analysis,
+      'modelName': modelName,
+      'timestamp': timestamp.toIso8601String(),
+    };
   }
 }

@@ -59,6 +59,18 @@ RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggin
 RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/danny/low/en_US-danny-low.onnx', '/app/voices/en_US-danny-low.onnx')" && \
     python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/danny/low/en_US-danny-low.onnx.json', '/app/voices/en_US-danny-low.onnx.json')"
 
+# Southern English Female - GB (Low)
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/southern_english_female/low/en_GB-southern_english_female-low.onnx', '/app/voices/en_GB-southern_english_female-low.onnx')" && \
+    python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/southern_english_female/low/en_GB-southern_english_female-low.onnx.json', '/app/voices/en_GB-southern_english_female-low.onnx.json')"
+
+# Jenny Dioco - GB Female (Medium)
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx', '/app/voices/en_GB-jenny_dioco-medium.onnx')" && \
+    python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json', '/app/voices/en_GB-jenny_dioco-medium.onnx.json')"
+
+# Indian English - Female (Medium) - Community Model
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/navgurukul-ai-labs/text-to-speech-en-IN-piper/resolve/main/en_IN-dataset%3Dspicor-english-base%3Dljspeech-epochs%3D1089.onnx', '/app/voices/en_IN-spicor-medium.onnx')" && \
+    python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/navgurukul-ai-labs/text-to-speech-en-IN-piper/resolve/main/en_IN-dataset%3Dspicor-english-base%3Dljspeech-epochs%3D1089.onnx.json', '/app/voices/en_IN-spicor-medium.onnx.json')"
+
 # Copy application code
 COPY main.py .
 

@@ -27,8 +27,6 @@ services:
     restart: unless-stopped
     ports:
       - "5500:5500"
-    volumes:
-      - tts_voices:/app/voices
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5500/health" ]
       interval: 30s
@@ -58,5 +56,4 @@ services:
 
 volumes:
   postgres_data:
-  tts_voices:
   minio_data:

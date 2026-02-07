@@ -66,6 +66,27 @@ VOICE_METADATA = {
         "accent": "American",
         "quality": "low",
         "description": "Fast male voice, quick responses"
+    },
+    "en_GB-southern_english_female-low": {
+        "name": "Sophie",
+        "gender": "female",
+        "accent": "British",
+        "quality": "low",
+        "description": "Southern English female voice"
+    },
+    "en_GB-jenny_dioco-medium": {
+        "name": "Jenny",
+        "gender": "female",
+        "accent": "British",
+        "quality": "medium",
+        "description": "Clear British female voice"
+    },
+    "en_IN-spicor-medium": {
+        "name": "Piya",
+        "gender": "female",
+        "accent": "Indian",
+        "quality": "medium",
+        "description": "Indian English female voice"
     }
 }
 

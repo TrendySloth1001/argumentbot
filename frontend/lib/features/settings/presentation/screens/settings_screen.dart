@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/data/settings_manager.dart';
 import '../../../../core/data/voice_settings.dart';
@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/config/api_config.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'how_it_works_screen.dart';
+import '../widgets/voice_preview_button.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -54,49 +55,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadVoices();
   }
 
-  final _previewPlayer = AudioPlayer();
-  String? _playingVoiceId;
-
   @override
   void dispose() {
-    _previewPlayer.dispose();
     super.dispose();
-  }
-
-  Future<void> _previewVoice(VoiceModel voice) async {
-    try {
-      if (_playingVoiceId == voice.id) {
-        await _previewPlayer.stop();
-        setState(() => _playingVoiceId = null);
-        return;
-      }
-
-      await _previewPlayer.stop();
-      setState(() => _playingVoiceId = voice.id);
-
-      // Example text for preview
-      const text = "Hello! I am ready to debate with you.";
-      final url = _ttsService.getStreamUrl(text, voice: voice.id);
-
-      await _previewPlayer.setUrl(url);
-      await _previewPlayer.play();
-
-      _previewPlayer.playerStateStream.listen((state) {
-        if (state.processingState == ProcessingState.completed) {
-          if (mounted) {
-            setState(() => _playingVoiceId = null);
-          }
-        }
-      });
-    } catch (e) {
-      print('Preview error: $e');
-      if (mounted) {
-        setState(() => _playingVoiceId = null);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to play preview: $e')));
-      }
-    }
   }
 
   Future<void> _loadSettings() async {
@@ -186,6 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       setState(() => _errorMessage = null);
       final voicesData = await _ttsService.getVoices();
+      print('SettingsScreen: Loaded ${voicesData.length} voices'); // DEBUG LOG
       setState(() {
         _availableVoices = voicesData
             .map((v) => VoiceModel.fromJson(v))
@@ -639,17 +601,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final voice = _availableVoices[index];
                     final isSelected = voice.id == currentVoiceId;
                     return ListTile(
-                      leading: IconButton(
-                        icon: Icon(
-                          _playingVoiceId == voice.id
-                              ? Icons.stop_circle
-                              : Icons.play_circle_fill,
-                          color: _playingVoiceId == voice.id
-                              ? Colors.redAccent
-                              : color,
-                          size: 32,
-                        ),
-                        onPressed: () => _previewVoice(voice),
+                      leading: VoicePreviewButton(
+                        voiceId: voice.id,
+                        ttsService: _ttsService,
+                        color: color,
                       ),
                       title: Text(
                         voice.name,

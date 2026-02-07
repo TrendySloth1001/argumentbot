@@ -173,7 +173,7 @@ class _DebateScreenState extends State<DebateScreen> {
         // Create Playlist
         final audioSources = sentences.map((sentence) {
           final url = _ttsService.getStreamUrl(sentence, voice: voice);
-          return AudioSource.uri(
+          return LockCachingAudioSource(
             Uri.parse(url),
             headers: headers,
             tag: sentence,

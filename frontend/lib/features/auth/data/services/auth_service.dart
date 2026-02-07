@@ -10,7 +10,10 @@ class AuthService {
 
   static String get baseUrl => ApiConfig.baseUrl;
 
+  String? _memoryToken;
+
   Future<String?> getToken() async {
+    if (_memoryToken != null) return _memoryToken;
     return await _storage.read(key: 'jwt_token');
   }
 
@@ -19,11 +22,9 @@ class AuthService {
       print('AuthService: checkAuth started');
     }
     try {
-      final token = await _storage.read(key: 'jwt_token');
+      final token = await getToken();
       if (kDebugMode) {
-        print(
-          'AuthService: token read from storage: ${token != null ? "FOUND" : "NULL"}',
-        );
+        print('AuthService: token read: ${token != null ? "FOUND" : "NULL"}');
       }
 
       if (token == null) return null;
@@ -41,7 +42,7 @@ class AuthService {
               'Authorization': 'Bearer $token',
             },
           )
-          .timeout(const Duration(seconds: 5)); // Add 5s timeout
+          .timeout(const Duration(seconds: 5));
 
       if (kDebugMode) {
         print('AuthService: response status ${response.statusCode}');
@@ -67,6 +68,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    _memoryToken = null;
     await _storage.deleteAll();
   }
 
@@ -83,7 +85,9 @@ class AuthService {
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
         if (data['token'] != null) {
+          // Default to persistent for registration, or update to accept param
           await _storage.write(key: 'jwt_token', value: data['token']);
+          _memoryToken = data['token'];
         }
         return User.fromJson(data);
       } else {
@@ -95,7 +99,11 @@ class AuthService {
     }
   }
 
-  Future<User> login(String email, String password) async {
+  Future<User> login(
+    String email,
+    String password, {
+    bool remember = false,
+  }) async {
     final url = Uri.parse('$baseUrl/auth/login');
 
     try {
@@ -107,9 +115,17 @@ class AuthService {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['token'] != null) {
-          await _storage.write(key: 'jwt_token', value: data['token']);
+        final token = data['token'];
+
+        if (token != null) {
+          _memoryToken = token;
+          if (remember) {
+            await _storage.write(key: 'jwt_token', value: token);
+          } else {
+            await _storage.delete(key: 'jwt_token');
+          }
         }
+
         return User.fromJson(data['user']);
       } else {
         final errorData = jsonDecode(response.body);
