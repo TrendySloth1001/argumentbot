@@ -502,6 +502,89 @@ NO META-COMMENTARY. NO "Explanation:". JUST THE RESPONSE.
         });
     }
 
+    async createMultiplayerDebate(topic: string, proUserId: string, conUserId: string) {
+        const debate = await this.prisma.debate.create({
+            data: {
+                topic,
+                status: DebateStatus.ACTIVE,
+                userId: proUserId,      // Pro Player
+                opponentId: conUserId,  // Con Player
+                mode: DebateMode.HUMAN_VS_HUMAN,
+                userRole: DebateRole.PRO // Creator/Pro logic (doesn't matter much for Hvh but keeps consistency)
+            },
+        });
+
+        await this.cacheManager.del('debates:all');
+        await this.cacheManager.del(`debates:user:${proUserId}`);
+        await this.cacheManager.del(`debates:user:${conUserId}`);
+
+        return debate;
+    }
+
+    async processMultiplayerTurn(debateId: string, userId: string, content: string) {
+        const debate = await this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: { orderBy: { timestamp: 'desc' }, take: 1 } } // Get last turn
+        });
+
+        if (!debate) throw new NotFoundException('Debate not found');
+        if (debate.status === DebateStatus.FINISHED) throw new Error('Debate finished');
+
+        // Determine Speaker Role
+        let speaker: Speaker;
+        if (userId === debate.userId) {
+            speaker = Speaker.MODEL_A; // Pro
+        } else if (userId === debate.opponentId) {
+            speaker = Speaker.MODEL_B; // Con
+        } else {
+            throw new Error('User is not a participant in this debate');
+        }
+
+        // Save Turn
+        const newTurn = await this.prisma.debateTurn.create({
+            data: {
+                debateId,
+                speaker,
+                content,
+                modelName: 'Human User' // Or fetch username if needed
+            }
+        });
+
+        // Judge the turn
+        // Context: Topic + Last Turn
+        const lastTurnContent = debate.turns[0]?.content || ''; // Be careful, turns[0] is the *previous* turn due to 'desc' sort
+
+        // If it's the very first turn (Pro opening), judge against topic?
+        // analyzeTurn takes (topic, opponentArg, response).
+        // For first turn, opponentArg can be "The topic itself".
+
+        const effectiveOpponentArg = lastTurnContent || `The topic is: ${debate.topic}`;
+
+        const analysis = await this.analyzeTurn(debate.topic, effectiveOpponentArg, content);
+
+        await this.prisma.debateTurn.update({
+            where: { id: newTurn.id },
+            data: { analysis }
+        });
+
+        // Check Win Condition
+        const conceded = (analysis as any).conceded === true;
+        if (conceded) {
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED }
+            });
+        }
+
+        await this.cacheManager.del(`debate:${debateId}`);
+
+        return {
+            turn: newTurn,
+            analysis,
+            finished: conceded
+        };
+    }
+
     private async analyzeTurn(topic: string, opponentArg: string, response: string): Promise<any> {
         const prompt = `
 You are a STRICT debate judge. Analyze this exchange:

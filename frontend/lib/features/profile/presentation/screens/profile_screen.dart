@@ -32,12 +32,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'https://static.vecteezy.com/system/resources/thumbnails/023/402/465/small/man-avatar-free-vector.jpg',
     'https://static.vecteezy.com/system/resources/thumbnails/006/898/692/small/avatar-face-icon-female-social-profile-of-business-woman-woman-portrait-support-service-call-center-illustration-free-vector.jpg',
     'https://static.vecteezy.com/system/resources/thumbnails/009/749/748/small/female-avatar-icon-cartoon-woman-profile-mascot-illustration-girl-face-business-user-logo-free-vector.jpg',
-    'https://plus.unsplash.com/premium_vector-1682269287900-d96e9a6c188b',
-    'https://plus.unsplash.com/premium_vector-1727955579176-073f1c85dcda',
-    'https://plus.unsplash.com/premium_vector-1741992520506-bc31b1405729',
-    'https://plus.unsplash.com/premium_vector-1723550230272-423cdac21d58',
-    'https://plus.unsplash.com/premium_vector-1721934027068-09908109d02e',
-    'https://plus.unsplash.com/premium_vector-1749476966758-539bb66459c8',
   ];
 
   void _logout(BuildContext context) async {
@@ -95,7 +89,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               : null,
                         ),
                         child: ClipOval(
-                          child: Image.network(url, fit: BoxFit.cover),
+                          child: Image.network(
+                            url,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.person, color: Colors.white),
+                          ),
                         ),
                       ),
                     );
@@ -180,6 +179,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ? Image.network(
                                   _currentAvatarUrl!,
                                   fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.black,
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        widget.user.username.isNotEmpty
+                                            ? widget.user.username[0]
+                                                  .toUpperCase()
+                                            : 'U',
+                                        style: const TextStyle(
+                                          color: neonGreen,
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 )
                               : Container(
                                   color: Colors.black,

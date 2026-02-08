@@ -38,7 +38,8 @@ model Debate {
   status    DebateStatus @default(ACTIVE)
   mode      DebateMode   @default(AI_VS_AI)
   userRole  DebateRole   @default(SPECTATOR)
-  userId    String?
+  userId    String?     // For AI_VS_AI (Creator) or USER_VS_AI (Pro/Con) or HUMAN_VS_HUMAN (Pro)
+  opponentId String?    // For HUMAN_VS_HUMAN mode (Con)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   turns     DebateTurn[]
@@ -47,6 +48,7 @@ model Debate {
   @@index([status])
   @@index([updatedAt])
   @@index([userId])
+  @@index([opponentId])
   @@index([createdAt])
 }
 
@@ -126,6 +128,7 @@ enum Speaker {
 enum DebateMode {
   AI_VS_AI
   USER_VS_AI
+  HUMAN_VS_HUMAN
 }
 
 enum DebateRole {

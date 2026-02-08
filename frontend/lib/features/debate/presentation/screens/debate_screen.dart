@@ -3,12 +3,16 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../data/models/debate.dart';
 import '../../data/services/debate_service.dart';
+import '../../../../core/services/socket_service.dart';
 import '../widgets/power_bar.dart';
 import '../../../feed/presentation/widgets/share_debate_dialog.dart';
 import '../../../../core/services/tts_service.dart';
 import '../../../../core/data/voice_settings.dart';
 import '../widgets/audio_waveform.dart';
 import '../widgets/karaoke_text.dart';
+import 'package:avatar_glow/avatar_glow.dart';
+import 'package:record/record.dart';
+import 'dart:convert';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -22,6 +26,7 @@ class DebateScreen extends StatefulWidget {
 class _DebateScreenState extends State<DebateScreen> {
   final _debateService = DebateService();
   final _ttsService = TtsService();
+  final _socketService = SocketService();
 
   Debate? _debate;
   bool _isLoading = true;
@@ -42,11 +47,61 @@ class _DebateScreenState extends State<DebateScreen> {
 
   bool _isKaraokeEnabled = true;
 
+  // STT
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isListening = false;
+
   @override
   void initState() {
     super.initState();
     _loadVoiceSettings();
     _loadDebate();
+
+    _socketService.onSttResult.listen((message) {
+      // print("STT Message: $message");
+      try {
+        final data = jsonDecode(message);
+        if (data['text'] != null) {
+          setState(() {
+            _turnController.text = data['text'];
+            _turnController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _turnController.text.length),
+            );
+          });
+        }
+      } catch (e) {
+        print("Error parsing STT: $e");
+      }
+    });
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final stream = await _audioRecorder.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+        );
+
+        if (mounted) setState(() => _isListening = true);
+
+        stream.listen((data) {
+          _socketService.sendAudioChunk(data);
+        });
+      } else {
+        print("STT: No microphone permission");
+      }
+    } catch (e) {
+      print("Error starting record: $e");
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    await _audioRecorder.stop();
+    if (mounted) setState(() => _isListening = false);
   }
 
   Future<void> _loadVoiceSettings() async {
@@ -63,6 +118,7 @@ class _DebateScreenState extends State<DebateScreen> {
     for (final player in _audioPlayers.values) {
       player.dispose();
     }
+    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -897,7 +953,23 @@ class _DebateScreenState extends State<DebateScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              // Mic Button
+              AvatarGlow(
+                animate: _isListening,
+                glowColor: neonGreen,
+                glowRadiusFactor: 0.4,
+                duration: const Duration(milliseconds: 2000),
+                repeat: true,
+                child: IconButton(
+                  onPressed: _isListening ? _stopRecording : _startRecording,
+                  icon: Icon(
+                    _isListening ? Icons.mic : Icons.mic_none,
+                    color: _isListening ? neonGreen : Colors.grey[400],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: _submitUserTurn,
                 child: Container(

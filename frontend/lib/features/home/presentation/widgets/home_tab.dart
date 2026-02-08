@@ -7,6 +7,7 @@ import '../../../debate/presentation/screens/debate_screen.dart';
 import '../../../debate/presentation/screens/debate_setup_screen.dart';
 import '../../../debate/presentation/screens/debate_history_screen.dart';
 import '../../../debate/presentation/widgets/power_bar.dart';
+import '../../../debate/presentation/screens/matchmaking_screen.dart';
 
 class HomeTab extends StatefulWidget {
   final User user;
@@ -63,6 +64,8 @@ class _HomeTabState extends State<HomeTab> {
                 _buildDivider(),
                 const SizedBox(height: 32),
                 _buildNewDebateCard(),
+                const SizedBox(height: 16),
+                _buildMultiplayerCard(),
                 const SizedBox(height: 32),
                 _buildDivider(),
                 const SizedBox(height: 24),
@@ -209,6 +212,82 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
             Icon(Icons.arrow_forward_ios, color: Colors.grey[600], size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMultiplayerCard() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MatchmakingScreen()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.blue[900]!.withOpacity(0.4),
+              Colors.purple[900]!.withOpacity(0.4),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.blueAccent.withAlpha(100)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blueAccent.withOpacity(0.2),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.blueAccent.withAlpha(50),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.public,
+                color: Colors.blueAccent,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Multiplayer Arena',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Debate real humans live',
+                    style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.blueAccent,
+              size: 16,
+            ),
           ],
         ),
       ),

@@ -31,8 +31,11 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.13",
+    "@nestjs/websockets": "^11.1.13",
     "@prisma/client": "^5.22.0",
     "@types/passport-jwt": "^4.0.1",
+    "@types/ws": "^8.18.1",
     "argon2": "^0.44.0",
     "axios": "^1.13.4",
     "cache-manager": "^7.2.8",
@@ -43,7 +46,9 @@
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "unique-names-generator": "^4.7.1"
+    "socket.io": "^4.8.3",
+    "unique-names-generator": "^4.7.1",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

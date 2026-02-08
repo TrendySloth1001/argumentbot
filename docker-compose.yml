@@ -27,12 +27,21 @@ services:
     restart: unless-stopped
     ports:
       - "5500:5500"
+    volumes:
+      - ./tts-service/voices:/app/voices
+      - ./tts-service/tts_cache:/app/tts_cache
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5500/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  stt-service:
+    build:
+      context: ./stt-service
+    ports:
+      - "8000:8000"
 
   # MinIO Object Storage (S3-compatible)
   minio:

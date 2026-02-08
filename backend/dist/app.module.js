@@ -22,6 +22,7 @@ const policy_module_1 = require("./policy/policy.module");
 const tts_module_1 = require("./tts/tts.module");
 const storage_module_1 = require("./storage/storage.module");
 const cache_manager_1 = require("@nestjs/cache-manager");
+const stt_gateway_1 = require("./gateways/stt.gateway");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -42,7 +43,7 @@ exports.AppModule = AppModule = __decorate([
             tts_module_1.TtsModule,
         ],
         controllers: [app_controller_1.AppController],
-        providers: [app_service_1.AppService],
+        providers: [app_service_1.AppService, stt_gateway_1.SttGateway],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

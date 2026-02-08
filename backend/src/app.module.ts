@@ -14,6 +14,8 @@ import { TtsModule } from './tts/tts.module';
 import { StorageModule } from './storage/storage.module';
 import { CacheModule } from '@nestjs/cache-manager';
 
+import { SttGateway } from './gateways/stt.gateway';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -30,7 +32,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     TtsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, SttGateway],
 })
 export class AppModule { }
 
