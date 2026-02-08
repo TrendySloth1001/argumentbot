@@ -18,7 +18,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
 
   bool _isLoading = false;
-  bool _rememberMe = false;
 
   Future<void> _handleLogin() async {
     final email = _emailController.text.trim();
@@ -34,11 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final user = await _authService.login(
-        email,
-        password,
-        remember: _rememberMe,
-      );
+      final user = await _authService.login(email, password);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,32 +109,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _rememberMe,
-                        onChanged: (value) {
-                          setState(() {
-                            _rememberMe = value ?? false;
-                          });
-                        },
-                        fillColor: MaterialStateProperty.resolveWith(
-                          (states) => Theme.of(context).primaryColor,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _rememberMe = !_rememberMe;
-                          });
-                        },
-                        child: const Text(
-                          'Remember Me',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 32),
                   PrimaryButton(
                     text: 'Login',

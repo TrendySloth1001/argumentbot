@@ -99,11 +99,7 @@ class AuthService {
     }
   }
 
-  Future<User> login(
-    String email,
-    String password, {
-    bool remember = false,
-  }) async {
+  Future<User> login(String email, String password) async {
     final url = Uri.parse('$baseUrl/auth/login');
 
     try {
@@ -119,11 +115,8 @@ class AuthService {
 
         if (token != null) {
           _memoryToken = token;
-          if (remember) {
-            await _storage.write(key: 'jwt_token', value: token);
-          } else {
-            await _storage.delete(key: 'jwt_token');
-          }
+          // Always persist token
+          await _storage.write(key: 'jwt_token', value: token);
         }
 
         return User.fromJson(data['user']);

@@ -8,6 +8,7 @@ class VoiceModel {
   final String accent;
   final String quality;
   final String description;
+  final String engine;
 
   const VoiceModel({
     required this.id,
@@ -16,6 +17,7 @@ class VoiceModel {
     required this.accent,
     required this.quality,
     required this.description,
+    this.engine = 'piper',
   });
 
   factory VoiceModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class VoiceModel {
       accent: json['accent'] ?? 'unknown',
       quality: json['quality'] ?? 'medium',
       description: json['description'] ?? '',
+      engine: json['engine'] ?? 'piper',
     );
   }
 

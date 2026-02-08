@@ -7,16 +7,23 @@ RUN apt-get update && apt-get install -u -y \
     curl \
     tar \
     gzip \
+    espeak-ng \
+    libsndfile1-dev \
+    build-essential \
+    cmake \
+    python3-dev \
+    git \
+    rustc \
+    cargo \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies (FastAPI, Uvicorn)
+# Install Python dependencies
 COPY requirements.txt .
 # Remove piper-tts from requirements to avoid conflict/double install
 RUN sed -i '/piper-tts/d' requirements.txt && \
     pip install --no-cache-dir -r requirements.txt
 
 # Install Piper Binary (Native)
-# Detect architecture and download appropriate binary
 ARG TARGETARCH
 RUN echo "Target Architecture: $TARGETARCH" && \
     if [ "$TARGETARCH" = "arm64" ]; then \
@@ -31,10 +38,17 @@ RUN echo "Target Architecture: $TARGETARCH" && \
 # Add piper to PATH
 ENV PATH="/app/piper_bin:$PATH"
 
-# Create voices directory
-RUN mkdir -p /app/voices
+# Create voices directory and tts cache
+RUN mkdir -p /app/voices /app/tts_cache
 
-# Download voice models (Keep existing downloads)
+# Accept Coqui TTS license
+ENV COQUI_TOS_AGREED=1
+
+# Pre-download Coqui TTS Model (VITS VCTK)
+# This prevents runtime download issues and speeds up first boot
+RUN python -c "from TTS.api import TTS; TTS(model_name='tts_models/en/vctk/vits', progress_bar=False, gpu=False).to('cpu')"
+
+# Download Piper voice models
 # Amy - US Female (Natural)
 RUN python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx', '/app/voices/en_US-amy-medium.onnx')" && \
     python -c "import urllib.request; urllib.request.urlretrieve('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json', '/app/voices/en_US-amy-medium.onnx.json')"

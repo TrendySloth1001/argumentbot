@@ -8,7 +8,12 @@ import { Readable } from 'stream';
 export interface Voice {
     id: string;
     name: string;
-    language: string;
+    language?: string;
+    gender?: string;
+    accent?: string;
+    quality?: string;
+    engine?: string;
+    description?: string;
 }
 
 export interface SynthesizeResult {

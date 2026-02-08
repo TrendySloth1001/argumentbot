@@ -10,7 +10,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/config/api_config.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'how_it_works_screen.dart';
-import '../widgets/voice_preview_button.dart';
+import '../widgets/voice_selection_modal.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -570,68 +570,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor:
+          Colors.transparent, // Transparent to show modal's rounded corners
+      isScrollControlled: true,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _availableVoices.length,
-                  itemBuilder: (context, index) {
-                    final voice = _availableVoices[index];
-                    final isSelected = voice.id == currentVoiceId;
-                    return ListTile(
-                      leading: VoicePreviewButton(
-                        voiceId: voice.id,
-                        ttsService: _ttsService,
-                        color: color,
-                      ),
-                      title: Text(
-                        voice.name,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : Colors.grey[400],
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '${voice.accent} • ${voice.quality}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
-                      trailing: isSelected
-                          ? Icon(Icons.check, color: color)
-                          : null,
-                      onTap: () {
-                        onChanged(voice.id);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+        return VoiceSelectionModal(
+          voices: _availableVoices,
+          selectedVoiceId: currentVoiceId,
+          onVoiceSelected: (voice) {
+            onChanged(voice.id);
+          },
+          // onPreviewVoice handled internally by modal now
         );
       },
     );
