@@ -33,17 +33,19 @@ model Document {
 
 
 model Debate {
-  id        String       @id @default(uuid())
-  topic     String
-  status    DebateStatus @default(ACTIVE)
-  mode      DebateMode   @default(AI_VS_AI)
-  userRole  DebateRole   @default(SPECTATOR)
-  userId    String?     // For AI_VS_AI (Creator) or USER_VS_AI (Pro/Con) or HUMAN_VS_HUMAN (Pro)
-  opponentId String?    // For HUMAN_VS_HUMAN mode (Con)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  turns     DebateTurn[]
-  posts     Post[]
+  id         String          @id @default(uuid())
+  topic      String
+  status     DebateStatus    @default(ACTIVE)
+  mode       DebateMode      @default(AI_VS_AI)
+  userRole   DebateRole      @default(SPECTATOR)
+  difficulty DifficultyLevel @default(INTERMEDIATE)
+  winner     String?         // "PRO", "CON", or null if ongoing/draw
+  userId     String?         // For AI_VS_AI (Creator) or USER_VS_AI (Pro/Con) or HUMAN_VS_HUMAN (Pro)
+  opponentId String?         // For HUMAN_VS_HUMAN mode (Con)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  turns      DebateTurn[]
+  posts      Post[]
 
   @@index([status])
   @@index([updatedAt])
@@ -135,4 +137,10 @@ enum DebateRole {
   PRO
   CON
   SPECTATOR
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  EXPERT
 }

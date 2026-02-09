@@ -17,6 +17,7 @@ class _DebateSetupScreenState extends State<DebateSetupScreen> {
   bool _isLoading = false;
   String _selectedMode = 'AI_VS_AI';
   String _selectedRole = 'SPECTATOR';
+  String _selectedDifficulty = 'INTERMEDIATE';
 
   static const Color neonGreen = Color(0xFF00FF88);
 
@@ -55,6 +56,7 @@ class _DebateSetupScreenState extends State<DebateSetupScreen> {
         topic,
         mode: _selectedMode,
         userRole: role,
+        difficulty: _selectedDifficulty,
       );
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -206,6 +208,44 @@ class _DebateSetupScreenState extends State<DebateSetupScreen> {
                             Expanded(child: _buildRoleButton('Pro', 'PRO')),
                             const SizedBox(width: 12),
                             Expanded(child: _buildRoleButton('Con', 'CON')),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'DIFFICULTY',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDifficultyButton(
+                                'Easy',
+                                'BEGINNER',
+                                Icons.sentiment_satisfied,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildDifficultyButton(
+                                'Normal',
+                                'INTERMEDIATE',
+                                Icons.sentiment_neutral,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildDifficultyButton(
+                                'Hard',
+                                'EXPERT',
+                                Icons.whatshot,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -371,6 +411,46 @@ class _DebateSetupScreenState extends State<DebateSetupScreen> {
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDifficultyButton(String label, String value, IconData icon) {
+    final isSelected = _selectedDifficulty == value;
+    Color buttonColor = neonGreen;
+    if (value == 'BEGINNER') buttonColor = Colors.green;
+    if (value == 'INTERMEDIATE') buttonColor = Colors.orange;
+    if (value == 'EXPERT') buttonColor = Colors.red;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedDifficulty = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? buttonColor.withOpacity(0.2) : Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? buttonColor : Colors.grey[800]!,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? buttonColor : Colors.grey[600],
+              size: 20,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[600],
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
       ),
     );

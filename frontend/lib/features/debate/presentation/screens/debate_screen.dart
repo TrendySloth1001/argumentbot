@@ -10,10 +10,11 @@ import '../../../../core/services/tts_service.dart';
 import '../../../../core/data/voice_settings.dart';
 import '../widgets/audio_waveform.dart';
 import '../widgets/karaoke_text.dart';
-import 'package:avatar_glow/avatar_glow.dart';
-import 'package:record/record.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:ui';
+import 'package:avatar_glow/avatar_glow.dart';
+import 'package:record/record.dart';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -361,6 +362,29 @@ class _DebateScreenState extends State<DebateScreen> {
         content,
       );
 
+      if (result.analysis != null && result.analysis!['warning'] != null) {
+        // Show warning dialog
+        if (mounted) {
+          final shouldRetry = await _showWarningDialog(
+            result.analysis!['warning'],
+            result.analysis!['violations'] ?? {},
+          );
+
+          if (shouldRetry == true) {
+            // Undo the turn
+            final success = await _debateService.undoLastTurn(widget.debateId);
+            if (success && mounted) {
+              setState(() {
+                _debate!.turns.removeLast();
+                _turnController.text = content; // Put text back for editing
+              });
+              _scrollToBottom();
+              return;
+            }
+          }
+        }
+      }
+
       if (result.finished) {
         // User conceded - debate is over
         if (mounted) {
@@ -467,8 +491,13 @@ class _DebateScreenState extends State<DebateScreen> {
                   horizontal: 20,
                   vertical: 16,
                 ),
-                itemCount: _debate!.turns.length,
+                itemCount:
+                    _debate!.turns.length +
+                    (_debate!.status == 'FINISHED' ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (index == _debate!.turns.length) {
+                    return _buildGameOverBanner();
+                  }
                   final turn = _debate!.turns[index];
                   return _buildMessageBubble(turn, turn.speaker == 'MODEL_A');
                 },
@@ -914,8 +943,169 @@ class _DebateScreenState extends State<DebateScreen> {
     );
   }
 
+  Future<bool?> _showWarningDialog(
+    String message,
+    Map<String, dynamic> violations,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 12),
+            Text(
+              'JUDGE WARNING',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'VIOLATIONS DETECTED:',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...violations.entries
+                .where((e) => e.value == true)
+                .map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.circle, color: Colors.red, size: 6),
+                        const SizedBox(width: 8),
+                        Text(
+                          e.key.replaceAll('_', ' '),
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'ACCEPT PENALTY',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: neonGreen,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'RETRY TURN',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGameOverBanner() {
+    final winner = _debate!.winner;
+    final winnerColor = winner == 'PRO'
+        ? neonPurple
+        : (winner == 'CON' ? neonBlue : neonGreen);
+    final winnerLabel = winner == 'PRO'
+        ? 'PRO VICTORIOUS'
+        : (winner == 'CON' ? 'CON VICTORIOUS' : 'DEBATE CONCLUDED');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 40),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: winnerColor.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: winnerColor.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.emoji_events, color: winnerColor, size: 48),
+          const SizedBox(height: 16),
+          Text(
+            winnerLabel,
+            style: TextStyle(
+              color: winnerColor,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            winner == null
+                ? 'The debate has ended.'
+                : 'The judge has declared ${winner == 'PRO' ? 'the Proponent' : 'the Opponent'} as the winner.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => _showResultsBottomSheet(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: winnerColor,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'VIEW FINAL SCORE',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomControl() {
     if (_debate!.status == 'FINISHED') {
+      final winner = _debate!.winner;
+      final winnerColor = winner == 'PRO'
+          ? neonPurple
+          : (winner == 'CON' ? neonBlue : neonGreen);
+      final winnerLabel = winner == 'PRO'
+          ? 'PRO WINS'
+          : (winner == 'CON' ? 'CON WINS' : 'DEBATE ENDED');
+
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
@@ -924,29 +1114,39 @@ class _DebateScreenState extends State<DebateScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.check_circle, color: neonGreen, size: 24),
+            Icon(Icons.emoji_events, color: winnerColor, size: 24),
             const SizedBox(width: 12),
-            const Text(
-              'Debate Concluded',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  winnerLabel,
+                  style: TextStyle(
+                    color: winnerColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  'The judge has made a decision',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                ),
+              ],
             ),
             const Spacer(),
             ElevatedButton(
               onPressed: () => _showResultsBottomSheet(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: neonGreen.withOpacity(0.2),
-                foregroundColor: neonGreen,
+                backgroundColor: winnerColor.withOpacity(0.2),
+                foregroundColor: winnerColor,
                 elevation: 0,
-                side: const BorderSide(color: neonGreen),
+                side: BorderSide(color: winnerColor),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
-              child: const Text('View Results'),
+              child: const Text('Details'),
             ),
           ],
         ),

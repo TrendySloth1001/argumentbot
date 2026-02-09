@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { RagService } from '../rag/rag.service';
 import { ScoringService } from './scoring.service';
-import { DebateStatus, Speaker, DebateMode, DebateRole } from '@prisma/client';
+import { DebateStatus, Speaker, DebateMode, DebateRole, DifficultyLevel } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 
@@ -16,6 +16,69 @@ export class DebateService {
         private readonly scoringService: ScoringService,
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
+
+    /**
+     * Calculate the current scores for both sides of a debate
+     */
+    private calculateDebateScores(turns: any[]): { proScore: number; conScore: number } {
+        let proScore = 50; // Starting base
+        let conScore = 50;
+
+        for (const turn of turns) {
+            if (turn.analysis) {
+                const persuasiveness = turn.analysis.persuasiveness ?? 50;
+                if (turn.speaker === 'MODEL_A' || turn.speaker === 'USER') {
+                    proScore += persuasiveness;
+                } else {
+                    conScore += persuasiveness;
+                }
+            }
+        }
+
+        // Clamp to minimum 0
+        proScore = Math.max(0, proScore);
+        conScore = Math.max(0, conScore);
+
+        return { proScore, conScore };
+    }
+
+    /**
+     * Check if the debate should end due to score dominance
+     * Returns winner ('PRO' or 'CON') or null if no winner yet
+     */
+    private async checkForWinner(debateId: string, turns: any[]): Promise<string | null> {
+        const { proScore, conScore } = this.calculateDebateScores(turns);
+        const total = proScore + conScore;
+
+        if (total === 0) return null;
+
+        const proPercent = (proScore / total) * 100;
+        const conPercent = (conScore / total) * 100;
+
+        console.log(`[Debate] Score check - PRO: ${proPercent.toFixed(1)}%, CON: ${conPercent.toFixed(1)}%`);
+
+        // If one side drops to 0% or below 5%, declare winner
+        if (proPercent <= 5) {
+            console.log(`[Debate] CON wins by score dominance (PRO at ${proPercent.toFixed(1)}%)`);
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED, winner: 'CON' }
+            });
+            return 'CON';
+        }
+
+        if (conPercent <= 5) {
+            console.log(`[Debate] PRO wins by score dominance (CON at ${conPercent.toFixed(1)}%)`);
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED, winner: 'PRO' }
+            });
+            return 'PRO';
+        }
+
+        return null;
+    }
+
 
     async getDebate(id: string) {
         const cacheKey = `debate:${id}`;
@@ -230,6 +293,10 @@ ${contextText}
     }
 
     async saveTurn(debateId: string, speaker: Speaker, content: string, scoringMode: 'AI' | 'ALGO', topic: string, lastTurnContent: string, modelName: string, lastTurnConceded: boolean = false) {
+        const debate = await this.prisma.debate.findUnique({
+            where: { id: debateId }
+        });
+
         const newTurn = await this.prisma.debateTurn.create({
             data: {
                 debateId,
@@ -246,7 +313,7 @@ ${contextText}
         if (scoringMode === 'ALGO') {
             analysis = this.scoringService.calculateScore(content, topic);
         } else {
-            analysis = await this.analyzeTurn(topic, lastTurnContent, content);
+            analysis = await this.analyzeTurn(topic, lastTurnContent, content, debate?.difficulty);
         }
 
         await this.prisma.debateTurn.update({
@@ -262,6 +329,15 @@ ${contextText}
                 where: { id: debateId },
                 data: { status: DebateStatus.FINISHED }
             });
+        }
+
+        // Check for auto-win by score dominance
+        const updatedDebate = await this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: true }
+        });
+        if (updatedDebate) {
+            await this.checkForWinner(debateId, updatedDebate.turns);
         }
 
         await this.cacheManager.del(`debate:${debateId}`);
@@ -291,7 +367,7 @@ ${contextText}
 
         // Analyze user turn? Yes, let the judge score the user!
         const lastTurnContent = debate.turns[0]?.content || '';
-        const analysis = await this.analyzeTurn(debate.topic, lastTurnContent, content);
+        const analysis = await this.analyzeTurn(debate.topic, lastTurnContent, content, (debate as any).difficulty);
 
         await this.prisma.debateTurn.update({
             where: { id: newTurn.id },
@@ -313,19 +389,46 @@ ${contextText}
             });
         }
 
+        // Check for auto-win by score dominance
+        const updatedDebate = await this.prisma.debate.findUnique({
+            where: { id: debateId },
+            include: { turns: true }
+        });
+        let winner: string | null = null;
+        if (updatedDebate) {
+            winner = await this.checkForWinner(debateId, updatedDebate.turns);
+        }
+
         await this.cacheManager.del(`debate:${debateId}`);
 
-        return { turn: newTurn, analysis, finished: userConceded };
+        return { turn: newTurn, analysis, finished: userConceded || winner !== null, winner };
+    }
+    async undoLastTurn(debateId: string) {
+        const lastTurn = await this.prisma.debateTurn.findFirst({
+            where: { debateId },
+            orderBy: { timestamp: 'desc' }
+        });
+
+        if (lastTurn) {
+            await this.prisma.debateTurn.delete({
+                where: { id: lastTurn.id }
+            });
+            await this.cacheManager.del(`debate:${debateId}`);
+            await this.cacheManager.del('debates:all');
+            return { success: true };
+        }
+        return { success: false, message: 'No turns found to undo' };
     }
 
-    async startDebate(topic: string, userId?: string, mode: DebateMode = DebateMode.AI_VS_AI, userRole: DebateRole = DebateRole.SPECTATOR) {
+    async startDebate(topic: string, userId?: string, mode: DebateMode = DebateMode.AI_VS_AI, userRole: DebateRole = DebateRole.SPECTATOR, difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE) {
         const debate = await this.prisma.debate.create({
             data: {
                 topic,
                 status: DebateStatus.ACTIVE,
                 userId: userId || null,
                 mode,
-                userRole
+                userRole,
+                difficulty
             },
         });
 
@@ -503,7 +606,7 @@ GO! Demolish their argument!
         if (scoringMode === 'ALGO') {
             analysis = this.scoringService.calculateScore(responseContent, debate.topic);
         } else {
-            analysis = await this.analyzeTurn(debate.topic, lastTurn.content, responseContent);
+            analysis = await this.analyzeTurn(debate.topic, lastTurn.content, responseContent, (debate as any).difficulty);
         }
 
         await this.prisma.debateTurn.update({
@@ -617,10 +720,24 @@ GO! Demolish their argument!
         };
     }
 
-    private async analyzeTurn(topic: string, opponentArg: string, response: string): Promise<any> {
+    private async analyzeTurn(topic: string, opponentArg: string, response: string, difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE): Promise<any> {
+        let penaltyMultiplier = 1.0;
+        let judgePersonality = "standard and fair";
+
+        if (difficulty === DifficultyLevel.BEGINNER) {
+            penaltyMultiplier = 0.5;
+            judgePersonality = "lenient and encouraging, focusing more on effort than perfect logic";
+        } else if (difficulty === DifficultyLevel.EXPERT) {
+            penaltyMultiplier = 1.5;
+            judgePersonality = "ruthless and pedantic, seeking any minor flaw to destroy your argument";
+        }
+
         const prompt = `
-You are an EXTREMELY STRICT debate judge executing as a TOOL. You MUST return structured JSON.
+You are a ${judgePersonality.toUpperCase()} debate judge executing as a TOOL. You MUST return structured JSON.
 Your job is to analyze this response and detect ANY violations.
+
+Difficulty Level: ${difficulty}
+Strictness Multiplier: ${penaltyMultiplier}x
 
 Topic: "${topic}"
 Opponent said: "${opponentArg}"
@@ -629,29 +746,29 @@ Response to judge: "${response}"
 === VIOLATION DETECTION (SET BOOLEANS) ===
 
 1. OFF_TOPIC: Does the response relate to the debate topic?
-   - TRUE if talking about unrelated subjects
-   - TRUE if completely ignoring the debate context
-   - Penalty: -80 points
+   - TRUE if talking about unrelated subjects or completely ignoring context.
+   - Base Penalty: -80 points
+   - Scaled Penalty: -${Math.round(80 * penaltyMultiplier)} points
 
 2. GIVING_UP: Is the speaker surrendering or conceding?
    - TRUE for: "I quit", "You win", "Ok you got me", "I give up", "GG", "Fine you're right"
    - TRUE for: "I can't argue with that", "Whatever", "I'm done", "I don't care"
-   - TRUE for any admission of defeat or loss of will to continue
+   - TRUE for any admission of defeat or loss of will to continue.
    - Penalty: INSTANT LOSS (conceded = true)
 
 3. PROVOKING: Is the response inappropriate or attacking personally?
-   - TRUE for: personal insults, ad hominem attacks, profanity
-   - TRUE for: "You're stupid", "You don't know anything", hate speech
-   - Penalty: -100 points + warning
+   - TRUE for: personal insults, ad hominem attacks, profanity.
+   - Base Penalty: -100 points
+   - Scaled Penalty: -${Math.round(100 * penaltyMultiplier)} points + warning
 
 4. NO_SUBSTANCE: Does the response lack any real argument?
-   - TRUE for: one-word answers, emoji only, "lol", "ok"
-   - TRUE for: completely empty or meaningless responses
-   - Penalty: -60 points
+   - TRUE for: one-word answers, emoji only, "lol", "ok", or empty responses.
+   - Base Penalty: -60 points
+   - Scaled Penalty: -${Math.round(60 * penaltyMultiplier)} points
 
-5. DODGING: Did they avoid answering the opponent's question?
-   - TRUE if opponent asked a direct question and speaker ignored it
-   - Penalty: -50 points
+5. DODGING: Did they avoid answering the opponent's direct question?
+   - Base Penalty: -50 points
+   - Scaled Penalty: -${Math.round(50 * penaltyMultiplier)} points
 
 === SCORING (0-100 each) ===
 - claim_score: Quality of their main argument (0 if no real claim)

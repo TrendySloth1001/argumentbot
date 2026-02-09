@@ -16,6 +16,7 @@ class DebateService {
     String topic, {
     String mode = 'AI_VS_AI',
     String userRole = 'SPECTATOR',
+    String difficulty = 'INTERMEDIATE',
   }) async {
     final token = await _storage.read(key: 'jwt_token');
     final response = await http.post(
@@ -24,7 +25,12 @@ class DebateService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({'topic': topic, 'mode': mode, 'userRole': userRole}),
+      body: jsonEncode({
+        'topic': topic,
+        'mode': mode,
+        'userRole': userRole,
+        'difficulty': difficulty,
+      }),
     );
 
     if (response.statusCode == 201 || response.statusCode == 200) {
@@ -71,11 +77,9 @@ class DebateService {
     }
   }
 
-  /// Returns (turn, finished) tuple. finished=true means user conceded.
-  Future<({DebateTurn turn, bool finished})> submitUserTurn(
-    String debateId,
-    String content,
-  ) async {
+  /// Returns (turn, analysis, finished) tuple.
+  Future<({DebateTurn turn, Map<String, dynamic>? analysis, bool finished})>
+  submitUserTurn(String debateId, String content) async {
     final token = await _storage.read(key: 'jwt_token');
     final response = await http.post(
       Uri.parse('$baseUrl/debate/$debateId/user-turn'),
@@ -89,8 +93,11 @@ class DebateService {
     if (response.statusCode == 201 || response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final turn = DebateTurn.fromJson(data['turn']);
+      final analysis = data['analysis'] != null
+          ? data['analysis'] as Map<String, dynamic>
+          : null;
       final finished = data['finished'] == true;
-      return (turn: turn, finished: finished);
+      return (turn: turn, analysis: analysis, finished: finished);
     } else {
       throw Exception('Failed to submit turn: ${response.statusCode}');
     }
@@ -181,5 +188,14 @@ class DebateService {
       print('Failed to load cached debates: $e');
     }
     return [];
+  }
+
+  Future<bool> undoLastTurn(String debateId) async {
+    final token = await _storage.read(key: 'jwt_token');
+    final response = await http.post(
+      Uri.parse('$baseUrl/debate/$debateId/undo'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    return response.statusCode == 200 || response.statusCode == 201;
   }
 }

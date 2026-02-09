@@ -9,8 +9,14 @@ export class DebateController {
 
     @UseGuards(AuthGuard('jwt'))
     @Post('start')
-    async startDebate(@Body('topic') topic: string, @Body('mode') mode: any, @Body('userRole') userRole: any, @Req() req) {
-        return this.debateService.startDebate(topic, req.user.userId, mode, userRole);
+    async startDebate(
+        @Body('topic') topic: string,
+        @Body('mode') mode: any,
+        @Body('userRole') userRole: any,
+        @Body('difficulty') difficulty: any,
+        @Req() req
+    ) {
+        return this.debateService.startDebate(topic, req.user.userId, mode, userRole, difficulty);
     }
 
     @Post(':id/user-turn')
@@ -21,6 +27,11 @@ export class DebateController {
     @Post(':id/next')
     async nextTurn(@Param('id') id: string, @Body('scoringMode') scoringMode?: 'AI' | 'ALGO') {
         return this.debateService.processTurn(id, scoringMode);
+    }
+
+    @Post(':id/undo')
+    async undoLastTurn(@Param('id') id: string) {
+        return this.debateService.undoLastTurn(id);
     }
 
     @Get(':id/stream')
