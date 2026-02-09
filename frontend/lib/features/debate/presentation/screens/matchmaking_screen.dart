@@ -24,6 +24,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
+  // Store subscriptions for cleanup
+  final List<StreamSubscription> _subscriptions = [];
+
   @override
   void initState() {
     super.initState();
@@ -31,29 +34,31 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     _socketService.connect();
 
     // Listen for match
-    _socketService.onMatchFound.listen((data) {
-      if (!mounted) return;
+    _subscriptions.add(
+      _socketService.onMatchFound.listen((data) {
+        if (!mounted) return;
 
-      setState(() {
-        _isSearching = false;
-        _statusText = "Match Found!";
-      });
-      _pulseController.stop();
+        setState(() {
+          _isSearching = false;
+          _statusText = "Match Found!";
+        });
+        _pulseController.stop();
 
-      // Navigate to Room
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DebateRoomScreen(
-            debateId: data['debateId'],
-            role: data['role'], // PRO or CON
-            opponentName: data['opponent'],
-            topic: data['topic'],
-            currentUserId: _user!.id,
+        // Navigate to Room
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DebateRoomScreen(
+              debateId: data['debateId'],
+              role: data['role'], // PRO or CON
+              opponentName: data['opponent'],
+              topic: data['topic'],
+              currentUserId: _user!.id,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      }),
+    );
 
     _pulseController = AnimationController(
       vsync: this,
@@ -72,7 +77,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
   @override
   void dispose() {
-    // _socketService.disconnect(); // Keep connection alive for DebateRoom
+    // Cancel all stream subscriptions
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
     _dotsTimer?.cancel();
     _pulseController.dispose();
     super.dispose();

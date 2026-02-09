@@ -298,9 +298,24 @@ ${contextText}
             data: { analysis }
         });
 
+        // Debug: Log analysis result
+        console.log(`[Debate] User turn analysis for ${debateId}:`, JSON.stringify(analysis, null, 2));
+
+        // Check if user conceded
+        const userConceded = (analysis as any).conceded === true;
+        console.log(`[Debate] User conceded check: ${userConceded} (raw value: ${(analysis as any).conceded})`);
+
+        if (userConceded) {
+            console.log(`[Debate] User conceded in debate ${debateId} - marking as FINISHED`);
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED }
+            });
+        }
+
         await this.cacheManager.del(`debate:${debateId}`);
 
-        return newTurn;
+        return { turn: newTurn, analysis, finished: userConceded };
     }
 
     async startDebate(topic: string, userId?: string, mode: DebateMode = DebateMode.AI_VS_AI, userRole: DebateRole = DebateRole.SPECTATOR) {
@@ -409,7 +424,7 @@ NO EXPLANATION OR META-COMMENTARY. JUST THE RESPONSE.
         const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'PROPONENT (defending)' : 'OPPONENT (attacking)';
         const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
-        const context = await this.ragService.searchSimilar(lastTurn.content);
+        const context = await this.ragService.searchSimilar(lastTurn.content, 5);
         const contextText = context.map((d) => d.content).join('\n');
 
         const history = debate.turns.map(t =>
@@ -438,21 +453,38 @@ NO META-COMMENTARY.
         } else {
             prompt = `
 You are the ${roleDescription} in a COMPETITIVE debate.
-You are debating against ${opponentDescription}. Your goal is to defeat them logically and rhetorically.
+You are debating against ${opponentDescription}. Your goal is to DEFEAT them with logic, evidence, and sharp rhetoric.
 
 Topic: "${debate.topic}"
 
-=== DEBATE HISTORY ===
+=== FULL DEBATE HISTORY ===
 ${history}
 
-=== FACTS ===
-${contextText}
+=== RELEVANT FACTS (USE THESE!) ===
+${contextText || 'No additional facts available - use your own knowledge.'}
 
-=== YOUR PERSONALITY ===
-[ONE pointed question to put them on the spot]
+=== YOUR MISSION ===
+1. READ the opponent's LAST argument carefully
+2. IDENTIFY their weakest point or logical flaw
+3. ATTACK that specific weakness with evidence
+4. Make YOUR OWN stronger counter-claim
+5. End with a POINTED QUESTION that traps them
 
-UNDER 100 WORDS. Be sharp, witty, confident. Roast their logic!
-NO META-COMMENTARY. NO "Explanation:". JUST THE RESPONSE.
+=== RESPONSE RULES ===
+- You MUST directly address what they just said
+- Quote or paraphrase their claim before attacking it
+- Provide at least ONE fact, statistic, or concrete example
+- Be confident, witty, and slightly ruthless
+- NO meta-commentary like "Here's my response" or "Let me explain"
+- 100-150 WORDS
+
+=== RESPONSE FORMAT ===
+**Their Flaw:** [Quote or summarize their weakest point]
+**My Attack:** [Your counter-argument with evidence]
+**My Claim:** [Your stronger position]
+**Challenge:** [A pointed question that puts pressure on them]
+
+GO! Demolish their argument!
 `;
         }
 
@@ -587,76 +619,109 @@ NO META-COMMENTARY. NO "Explanation:". JUST THE RESPONSE.
 
     private async analyzeTurn(topic: string, opponentArg: string, response: string): Promise<any> {
         const prompt = `
-You are a STRICT debate judge. Analyze this exchange:
+You are an EXTREMELY STRICT debate judge executing as a TOOL. You MUST return structured JSON.
+Your job is to analyze this response and detect ANY violations.
 
 Topic: "${topic}"
 Opponent said: "${opponentArg}"
-Response: "${response}"
+Response to judge: "${response}"
 
-=== SCORING CRITERIA ===
+=== VIOLATION DETECTION (SET BOOLEANS) ===
 
-1. CLAIM QUALITY (0-100):
-   - 100: Clear falsifiable claim with evidence
-   - 50: Vague claim, no evidence
-   - 0: No claim or pure abstraction
+1. OFF_TOPIC: Does the response relate to the debate topic?
+   - TRUE if talking about unrelated subjects
+   - TRUE if completely ignoring the debate context
+   - Penalty: -80 points
 
-2. DIRECT ANSWER (0-100):
-   - 100: Answered opponent's question directly
-   - 50: Partially addressed
-   - 0: Ignored or deflected (MAJOR PENALTY)
+2. GIVING_UP: Is the speaker surrendering or conceding?
+   - TRUE for: "I quit", "You win", "Ok you got me", "I give up", "GG", "Fine you're right"
+   - TRUE for: "I can't argue with that", "Whatever", "I'm done", "I don't care"
+   - TRUE for any admission of defeat or loss of will to continue
+   - Penalty: INSTANT LOSS (conceded = true)
 
-3. ATTACK STRENGTH (0-100):
-   - 100: Identified specific flaw with counter-evidence
-   - 50: Generic disagreement
-   - 0: Agreed or didn't challenge
+3. PROVOKING: Is the response inappropriate or attacking personally?
+   - TRUE for: personal insults, ad hominem attacks, profanity
+   - TRUE for: "You're stupid", "You don't know anything", hate speech
+   - Penalty: -100 points + warning
 
-4. VAGUENESS PENALTY (-30 for each):
-   - Used "mystery/meaning/purpose/interconnected" without concrete definition
-   - Made unfalsifiable claims (e.g. "it's too complex to know")
-   - Asked rhetorical questions instead of pointed ones
-   - Failed to use provided context/facts (if applicable)
+4. NO_SUBSTANCE: Does the response lack any real argument?
+   - TRUE for: one-word answers, emoji only, "lol", "ok"
+   - TRUE for: completely empty or meaningless responses
+   - Penalty: -60 points
 
-5. NON-ANSWER PENALTY (-50):
-   - Did not directly address the opponent's question with a Yes/No/Because statement.
+5. DODGING: Did they avoid answering the opponent's question?
+   - TRUE if opponent asked a direct question and speaker ignored it
+   - Penalty: -50 points
 
-=== VICTORY CHECK (INSTANT END) ===
-- Did the speaker EXPLICITLY concede? e.g. "I quit", "You're right", "I give up".
-- Did they refuse to continue arguing?
-- -> Set "conceded": true
+=== SCORING (0-100 each) ===
+- claim_score: Quality of their main argument (0 if no real claim)
+- evidence_score: Did they provide facts/examples? (0 if none)
+- rebuttal_score: Did they counter opponent's points? (0 if ignored)
 
-=== OUTPUT ===
-Return ONLY valid JSON:
+=== FINAL SCORE CALCULATION ===
+base_score = (claim_score + evidence_score + rebuttal_score) / 3
+penalties = off_topic_penalty + provoking_penalty + no_substance_penalty + dodging_penalty
+final_persuasiveness = max(0, base_score + penalties)
+
+If ANY giving_up signal: conceded = true, debate ends
+
+=== REQUIRED OUTPUT (STRICT JSON) ===
 {
-    "persuasiveness": <number 0-100, average of above minus penalties>,
+    "persuasiveness": <number 0-100, can be 0 or negative after penalties>,
     "claim_score": <number 0-100>,
-    "answer_score": <number 0-100>,
-    "attack_score": <number 0-100>,
-    "vagueness_penalty": <number, negative>,
-    "key_point": "<one sentence summary of their main claim>",
-    "weakness": "<one sentence describing the biggest flaw>",
-    "conceded": <boolean, true if they gave up>
+    "evidence_score": <number 0-100>,
+    "rebuttal_score": <number 0-100>,
+    "off_topic": <boolean>,
+    "giving_up": <boolean>,
+    "provoking": <boolean>,
+    "no_substance": <boolean>,
+    "dodging": <boolean>,
+    "warning": "<string, describe the violation if any, otherwise empty string>",
+    "key_point": "<one sentence summary of their argument, or 'No valid argument'>",
+    "weakness": "<biggest flaw in their response>",
+    "conceded": <boolean, true if giving_up detected>
 }
+
+RETURN ONLY THE JSON. NO EXPLANATION.
 `;
 
         try {
+            console.log(`[Judge] Analyzing response: "${response.substring(0, 50)}..."`);
             const jsonStr = await this.llmService.generateResponse(prompt, 'llama3.2');
 
             // Extract JSON object using regex to handle potential markdown or extra text
             const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
             if (!jsonMatch) {
-                console.error('No JSON found in analysis response:', jsonStr);
+                console.error('[Judge] No JSON found in analysis response:', jsonStr);
                 throw new Error('No JSON found');
             }
 
-            return JSON.parse(jsonMatch[0]);
+            const result = JSON.parse(jsonMatch[0]);
+
+            // Log violations for debugging
+            if (result.off_topic) console.log(`[Judge] VIOLATION: Off-topic detected`);
+            if (result.giving_up) console.log(`[Judge] VIOLATION: Giving up detected - CONCESSION`);
+            if (result.provoking) console.log(`[Judge] VIOLATION: Provoking statement detected`);
+            if (result.no_substance) console.log(`[Judge] VIOLATION: No substance detected`);
+            if (result.dodging) console.log(`[Judge] VIOLATION: Dodging detected`);
+            if (result.warning) console.log(`[Judge] WARNING: ${result.warning}`);
+
+            console.log(`[Judge] Final score: ${result.persuasiveness}, Conceded: ${result.conceded}`);
+
+            return result;
         } catch (e) {
-            console.error('Analysis parsing failed:', e);
+            console.error('[Judge] Analysis parsing failed:', e);
             return {
                 persuasiveness: 50,
                 claim_score: 50,
-                answer_score: 50,
-                attack_score: 50,
-                vagueness_penalty: 0,
+                evidence_score: 50,
+                rebuttal_score: 50,
+                off_topic: false,
+                giving_up: false,
+                provoking: false,
+                no_substance: false,
+                dodging: false,
+                warning: "",
                 key_point: "Analysis unavailable",
                 weakness: "Could not analyze",
                 conceded: false

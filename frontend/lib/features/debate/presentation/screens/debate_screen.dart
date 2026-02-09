@@ -13,6 +13,7 @@ import '../widgets/karaoke_text.dart';
 import 'package:avatar_glow/avatar_glow.dart';
 import 'package:record/record.dart';
 import 'dart:convert';
+import 'dart:async';
 
 class DebateScreen extends StatefulWidget {
   final String debateId;
@@ -51,28 +52,33 @@ class _DebateScreenState extends State<DebateScreen> {
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isListening = false;
 
+  // Store subscriptions for cleanup
+  final List<StreamSubscription> _subscriptions = [];
+
   @override
   void initState() {
     super.initState();
     _loadVoiceSettings();
     _loadDebate();
 
-    _socketService.onSttResult.listen((message) {
-      // print("STT Message: $message");
-      try {
-        final data = jsonDecode(message);
-        if (data['text'] != null) {
-          setState(() {
-            _turnController.text = data['text'];
-            _turnController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _turnController.text.length),
-            );
-          });
+    _subscriptions.add(
+      _socketService.onSttResult.listen((message) {
+        print("DebateScreen: STT Message received: $message");
+        try {
+          final data = jsonDecode(message);
+          if (data['text'] != null) {
+            setState(() {
+              _turnController.text = data['text'];
+              _turnController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _turnController.text.length),
+              );
+            });
+          }
+        } catch (e) {
+          print("DebateScreen: Error parsing STT: $e");
         }
-      } catch (e) {
-        print("Error parsing STT: $e");
-      }
-    });
+      }),
+    );
   }
 
   Future<void> _startRecording() async {
@@ -113,6 +119,10 @@ class _DebateScreenState extends State<DebateScreen> {
 
   @override
   void dispose() {
+    // Cancel all stream subscriptions
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
     _turnController.dispose();
     _scrollController.dispose();
     for (final player in _audioPlayers.values) {
@@ -346,7 +356,25 @@ class _DebateScreenState extends State<DebateScreen> {
 
     try {
       // Send to backend
-      await _debateService.submitUserTurn(widget.debateId, content);
+      final result = await _debateService.submitUserTurn(
+        widget.debateId,
+        content,
+      );
+
+      if (result.finished) {
+        // User conceded - debate is over
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You conceded! Debate ended.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          // Reload to get final state
+          await _loadDebate();
+        }
+        return;
+      }
 
       // Trigger AI response immediately
       _nextTurn();
@@ -407,13 +435,16 @@ class _DebateScreenState extends State<DebateScreen> {
     for (var turn in _debate!.turns) {
       if (turn.analysis != null) {
         final p = (turn.analysis!['persuasiveness'] ?? 50) as num;
-        if (turn.speaker == 'MODEL_A') {
+        if (turn.speaker == 'MODEL_A' || turn.speaker == 'USER') {
           scoreA += p.toDouble();
         } else {
           scoreB += p.toDouble();
         }
       }
     }
+    // Clamp scores to prevent negative values or extreme overflow
+    scoreA = scoreA.clamp(0, double.maxFinite);
+    scoreB = scoreB.clamp(0, double.maxFinite);
 
     if (_debate!.mode == 'USER_VS_AI' && _isUserTurn && !_isProcessingTurn) {
       // Auto-focus logic could go here

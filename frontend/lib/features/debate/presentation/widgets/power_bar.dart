@@ -19,8 +19,9 @@ class PowerBar extends StatelessWidget {
     final total = scoreA + scoreB;
     if (total == 0) return const SizedBox.shrink();
 
-    final percentA = (scoreA / total * 100).toInt();
-    final percentB = 100 - percentA;
+    // Clamp to valid 0-100 range
+    final percentA = (scoreA / total * 100).clamp(0, 100).toInt();
+    final percentB = (100 - percentA).clamp(0, 100);
 
     return Column(
       children: [

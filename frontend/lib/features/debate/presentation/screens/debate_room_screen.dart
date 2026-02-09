@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:avatar_glow/avatar_glow.dart';
 import 'package:record/record.dart';
 import 'dart:convert';
+import 'dart:async';
 
 class DebateRoomScreen extends StatefulWidget {
   final String debateId;
@@ -40,6 +41,9 @@ class _DebateRoomScreenState extends State<DebateRoomScreen> {
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isListening = false;
 
+  // Store subscriptions for cleanup
+  final List<StreamSubscription> _subscriptions = [];
+
   @override
   void initState() {
     super.initState();
@@ -48,46 +52,54 @@ class _DebateRoomScreenState extends State<DebateRoomScreen> {
     // Pro starts first
     _isMyTurn = widget.role == 'PRO';
 
-    _socketService.onNewTurn.listen((data) {
-      if (!mounted) return;
-      setState(() {
-        _turns.add(data);
-        _isMyTurn = data['userId'] != widget.currentUserId;
-        _isOpponentTyping = false;
-      });
-      _scrollToBottom();
-    });
+    _subscriptions.add(
+      _socketService.onNewTurn.listen((data) {
+        if (!mounted) return;
+        setState(() {
+          _turns.add(data);
+          _isMyTurn = data['userId'] != widget.currentUserId;
+          _isOpponentTyping = false;
+        });
+        _scrollToBottom();
+      }),
+    );
 
-    _socketService.onScoreUpdate.listen((data) {
-      if (!mounted) return;
-      setState(() {
-        _lastAnalysis = data['analysis'];
-      });
-    });
+    _subscriptions.add(
+      _socketService.onScoreUpdate.listen((data) {
+        if (!mounted) return;
+        setState(() {
+          _lastAnalysis = data['analysis'];
+        });
+      }),
+    );
 
-    _socketService.onOpponentTyping.listen((status) {
-      if (!mounted) return;
-      setState(() {
-        _isOpponentTyping = status == 'typing';
-      });
-    });
+    _subscriptions.add(
+      _socketService.onOpponentTyping.listen((status) {
+        if (!mounted) return;
+        setState(() {
+          _isOpponentTyping = status == 'typing';
+        });
+      }),
+    );
 
-    _socketService.onSttResult.listen((message) {
-      // print("STT Message: $message");
-      try {
-        final data = jsonDecode(message);
-        if (data['text'] != null) {
-          setState(() {
-            _textController.text = data['text'];
-            _textController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _textController.text.length),
-            );
-          });
+    _subscriptions.add(
+      _socketService.onSttResult.listen((message) {
+        print("DebateRoom: STT Message received: $message");
+        try {
+          final data = jsonDecode(message);
+          if (data['text'] != null) {
+            setState(() {
+              _textController.text = data['text'];
+              _textController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _textController.text.length),
+              );
+            });
+          }
+        } catch (e) {
+          print("DebateRoom: Error parsing STT: $e");
         }
-      } catch (e) {
-        print("Error parsing STT: $e");
-      }
-    });
+      }),
+    );
 
     _textController.addListener(_onTyping);
   }
@@ -158,6 +170,10 @@ class _DebateRoomScreenState extends State<DebateRoomScreen> {
 
   @override
   void dispose() {
+    // Cancel all stream subscriptions to prevent memory leaks
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
     _socketService.leaveDebateRoom(widget.debateId);
     _textController.dispose();
     _scrollController.dispose();

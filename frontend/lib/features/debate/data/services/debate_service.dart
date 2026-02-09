@@ -71,7 +71,11 @@ class DebateService {
     }
   }
 
-  Future<DebateTurn> submitUserTurn(String debateId, String content) async {
+  /// Returns (turn, finished) tuple. finished=true means user conceded.
+  Future<({DebateTurn turn, bool finished})> submitUserTurn(
+    String debateId,
+    String content,
+  ) async {
     final token = await _storage.read(key: 'jwt_token');
     final response = await http.post(
       Uri.parse('$baseUrl/debate/$debateId/user-turn'),
@@ -83,7 +87,10 @@ class DebateService {
     );
 
     if (response.statusCode == 201 || response.statusCode == 200) {
-      return DebateTurn.fromJson(jsonDecode(response.body));
+      final data = jsonDecode(response.body);
+      final turn = DebateTurn.fromJson(data['turn']);
+      final finished = data['finished'] == true;
+      return (turn: turn, finished: finished);
     } else {
       throw Exception('Failed to submit turn: ${response.statusCode}');
     }

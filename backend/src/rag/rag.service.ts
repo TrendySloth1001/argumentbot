@@ -62,10 +62,12 @@ export class RagService {
             const results = await this.prisma.$queryRaw<{ content: string; similarity: number }[]>`
                 SELECT content, 1 - (embedding <=> ${vectorString}::vector) as similarity
                 FROM "Document"
+                WHERE 1 - (embedding <=> ${vectorString}::vector) > 0.3
                 ORDER BY embedding <=> ${vectorString}::vector
                 LIMIT ${limit};
             `;
 
+            this.logger.log(`RAG found ${results.length} relevant documents (similarity > 0.3)`);
             return results;
         } catch (error) {
             this.logger.error('Search failed', error);

@@ -9,7 +9,12 @@ class SocketService {
 
   IO.Socket? _debateSocket;
   IO.Socket? _matchmakingSocket;
+  IO.Socket? _sttSocket;
   final AuthService _authService = AuthService();
+
+  // Connection state tracking
+  bool _isConnected = false;
+  bool get isConnected => _isConnected;
 
   // Streams
   final _matchFoundController =
@@ -20,6 +25,8 @@ class SocketService {
   final _scoreUpdateController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _opponentTypingController = StreamController<String>.broadcast();
+  final _sttResultController = StreamController<String>.broadcast();
+  final _connectionStatusController = StreamController<String>.broadcast();
 
   Stream<Map<String, dynamic>> get onMatchFound => _matchFoundController.stream;
   Stream<Map<String, dynamic>> get onQueueStatus =>
@@ -28,6 +35,8 @@ class SocketService {
   Stream<Map<String, dynamic>> get onScoreUpdate =>
       _scoreUpdateController.stream;
   Stream<String> get onOpponentTyping => _opponentTypingController.stream;
+  Stream<String> get onSttResult => _sttResultController.stream;
+  Stream<String> get onConnectionStatus => _connectionStatusController.stream;
 
   SocketService._internal();
 
@@ -35,32 +44,51 @@ class SocketService {
     // Lazy init or manual init
   }
 
-  IO.Socket? _sttSocket;
-  final _sttResultController = StreamController<String>.broadcast();
-  Stream<String> get onSttResult => _sttResultController.stream;
+  Future<void> connect() async {
+    if (_isConnected) {
+      print('SocketService: Already connected, skipping...');
+      return;
+    }
 
-  void connect() async {
     final token = await _authService.getToken();
-    if (token == null) return;
+    if (token == null) {
+      print('SocketService: No token, cannot connect');
+      return;
+    }
 
-    // Matchmaking Socket
+    print('SocketService: Connecting to sockets...');
+
+    // Matchmaking Socket - with reconnection
     _matchmakingSocket = IO.io(
       '${ApiConfig.baseUrl}/matchmaking',
       IO.OptionBuilder()
           .setTransports(['websocket'])
-          .enableForceNew()
-          .setExtraHeaders({
-            'Authorization': 'Bearer $token',
-          }) // If we add auth guard
+          .enableAutoConnect()
+          .enableReconnection()
+          .setReconnectionAttempts(10)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(5000)
+          .setExtraHeaders({'Authorization': 'Bearer $token'})
           .build(),
     );
 
     _matchmakingSocket!.onConnect((_) {
-      print('Connected to Matchmaking Namespace');
+      print('SocketService: Connected to Matchmaking');
+      _connectionStatusController.add('matchmaking_connected');
+    });
+
+    _matchmakingSocket!.onDisconnect((_) {
+      print('SocketService: Matchmaking disconnected');
+      _connectionStatusController.add('matchmaking_disconnected');
+    });
+
+    _matchmakingSocket!.onReconnect((_) {
+      print('SocketService: Matchmaking reconnected');
+      _connectionStatusController.add('matchmaking_reconnected');
     });
 
     _matchmakingSocket!.on('match_found', (data) {
-      print('Match found: $data');
+      print('SocketService: Match found: $data');
       _matchFoundController.add(Map<String, dynamic>.from(data));
     });
 
@@ -68,18 +96,33 @@ class SocketService {
       _queueStatusController.add({'status': 'joined', ...data});
     });
 
-    // Debate Socket
+    // Debate Socket - with reconnection
     _debateSocket = IO.io(
       '${ApiConfig.baseUrl}/debate',
       IO.OptionBuilder()
           .setTransports(['websocket'])
-          .enableForceNew()
+          .enableAutoConnect()
+          .enableReconnection()
+          .setReconnectionAttempts(10)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(5000)
           .setExtraHeaders({'Authorization': 'Bearer $token'})
           .build(),
     );
 
     _debateSocket!.onConnect((_) {
-      print('Connected to Debate Namespace');
+      print('SocketService: Connected to Debate');
+      _connectionStatusController.add('debate_connected');
+    });
+
+    _debateSocket!.onDisconnect((_) {
+      print('SocketService: Debate disconnected');
+      _connectionStatusController.add('debate_disconnected');
+    });
+
+    _debateSocket!.onReconnect((_) {
+      print('SocketService: Debate reconnected');
+      _connectionStatusController.add('debate_reconnected');
     });
 
     _debateSocket!.on('new_turn', (data) {
@@ -98,31 +141,60 @@ class SocketService {
       _opponentTypingController.add('stopped');
     });
 
-    // STT Socket
+    // STT Socket - with reconnection
     _sttSocket = IO.io(
       '${ApiConfig.baseUrl}/stt',
       IO.OptionBuilder()
           .setTransports(['websocket'])
-          .enableForceNew()
+          .enableAutoConnect()
+          .enableReconnection()
+          .setReconnectionAttempts(10)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(5000)
           .setExtraHeaders({'Authorization': 'Bearer $token'})
           .build(),
     );
 
     _sttSocket!.onConnect((_) {
-      print('Connected to STT Namespace');
+      print('SocketService: Connected to STT');
+      _connectionStatusController.add('stt_connected');
+    });
+
+    _sttSocket!.onDisconnect((_) {
+      print('SocketService: STT disconnected');
+      _connectionStatusController.add('stt_disconnected');
+    });
+
+    _sttSocket!.onReconnect((_) {
+      print('SocketService: STT reconnected');
+      _connectionStatusController.add('stt_reconnected');
     });
 
     _sttSocket!.on('transcription', (data) {
-      // print('STT Transcription: $data');
+      print('SocketService: STT transcription received: $data');
       if (data is String) {
         _sttResultController.add(data);
+      } else if (data is Map) {
+        // Handle JSON object directly
+        _sttResultController.add(data.toString());
       }
     });
 
-    _sttSocket!.onConnectError((data) => print('STT Connection Error: $data'));
+    _sttSocket!.onConnectError((data) {
+      print('SocketService: STT Connection Error: $data');
+      _connectionStatusController.add('stt_error');
+    });
+
+    _isConnected = true;
+    print('SocketService: All sockets initialized');
   }
 
-  // ... (existing methods)
+  // Ensure connection before operations
+  Future<void> ensureConnected() async {
+    if (!_isConnected) {
+      await connect();
+    }
+  }
 
   // Matchmaking Methods
   void joinQueue(String userId, String username) {
@@ -155,7 +227,7 @@ class SocketService {
       'debateId': debateId,
       'userId': userId,
       'content': content,
-      'speaker': speaker, // 'MODEL_A' (Pro/User1) or 'MODEL_B' (Con/User2)
+      'speaker': speaker,
     });
   }
 
@@ -173,15 +245,33 @@ class SocketService {
     }
   }
 
+  // STT Methods
   void sendAudioChunk(List<int> data) {
     if (_sttSocket != null && _sttSocket!.connected) {
       _sttSocket!.emit('audio_chunk', data);
+    } else {
+      print('SocketService: STT socket not connected, cannot send audio');
     }
   }
 
+  bool get isSttConnected => _sttSocket?.connected ?? false;
+
   void disconnect() {
+    print('SocketService: Disconnecting all sockets...');
     _matchmakingSocket?.disconnect();
     _debateSocket?.disconnect();
     _sttSocket?.disconnect();
+    _isConnected = false;
+  }
+
+  void dispose() {
+    disconnect();
+    _matchFoundController.close();
+    _queueStatusController.close();
+    _newTurnController.close();
+    _scoreUpdateController.close();
+    _opponentTypingController.close();
+    _sttResultController.close();
+    _connectionStatusController.close();
   }
 }

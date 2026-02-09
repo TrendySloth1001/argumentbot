@@ -26,6 +26,35 @@ export class LlmService {
             throw new InternalServerErrorException('Failed to communicate with AI model');
         }
     }
+
+    /**
+     * Generate response using full conversation history for better context.
+     * Messages should be in format: [{ role: 'system' | 'user' | 'assistant', content: string }]
+     */
+    async generateChatResponse(
+        messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+        model: string = 'llama3.2'
+    ): Promise<string> {
+        try {
+            console.log(`[LLM] Generating chat response with ${messages.length} messages using ${model}`);
+            const response = await firstValueFrom(
+                this.httpService.post<{ message: { content: string } }>(this.ollamaUrl, {
+                    model: model,
+                    messages: messages,
+                    stream: false,
+                    options: {
+                        num_ctx: 8192, // Increase context window
+                        temperature: 0.7,
+                    },
+                }),
+            );
+
+            return response.data.message?.content || 'No response from AI.';
+        } catch (error) {
+            console.error('Ollama Chat API Error:', error);
+            throw new InternalServerErrorException('Failed to communicate with AI model');
+        }
+    }
     async generateStream(content: string, model: string = 'llama3.2'): Promise<any> {
         try {
             const response = await fetch(this.ollamaUrl, {
