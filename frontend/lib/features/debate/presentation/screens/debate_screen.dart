@@ -362,7 +362,9 @@ class _DebateScreenState extends State<DebateScreen> {
         content,
       );
 
-      if (result.analysis != null && result.analysis!['warning'] != null) {
+      if (result.analysis != null &&
+          result.analysis!['warning'] != null &&
+          (result.analysis!['warning'] as String).isNotEmpty) {
         // Show warning dialog
         if (mounted) {
           final shouldRetry = await _showWarningDialog(

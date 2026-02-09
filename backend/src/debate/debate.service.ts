@@ -788,15 +788,17 @@ If ANY giving_up signal: conceded = true, debate ends
     "claim_score": <number 0-100>,
     "evidence_score": <number 0-100>,
     "rebuttal_score": <number 0-100>,
-    "off_topic": <boolean>,
-    "giving_up": <boolean>,
-    "provoking": <boolean>,
-    "no_substance": <boolean>,
-    "dodging": <boolean>,
+    "violations": {
+        "off_topic": <boolean>,
+        "giving_up": <boolean>,
+        "provoking": <boolean>,
+        "no_substance": <boolean>,
+        "dodging": <boolean>
+    },
     "warning": "<string, describe the violation if any, otherwise empty string>",
     "key_point": "<one sentence summary of their argument, or 'No valid argument'>",
     "weakness": "<biggest flaw in their response>",
-    "conceded": <boolean, true if giving_up detected>
+    "conceded": <boolean, true if violations.giving_up detected>
 }
 
 RETURN ONLY THE JSON. NO EXPLANATION.
@@ -815,14 +817,38 @@ RETURN ONLY THE JSON. NO EXPLANATION.
 
             const result = JSON.parse(jsonMatch[0]);
 
-            // Log violations for debugging
-            if (result.off_topic) console.log(`[Judge] VIOLATION: Off-topic detected`);
-            if (result.giving_up) console.log(`[Judge] VIOLATION: Giving up detected - CONCESSION`);
-            if (result.provoking) console.log(`[Judge] VIOLATION: Provoking statement detected`);
-            if (result.no_substance) console.log(`[Judge] VIOLATION: No substance detected`);
-            if (result.dodging) console.log(`[Judge] VIOLATION: Dodging detected`);
-            if (result.warning) console.log(`[Judge] WARNING: ${result.warning}`);
+            // Ensure violations object exists
+            if (!result.violations) {
+                result.violations = {
+                    off_topic: !!result.off_topic,
+                    giving_up: !!result.giving_up || !!result.conceded,
+                    provoking: !!result.provoking,
+                    no_substance: !!result.no_substance,
+                    dodging: !!result.dodging
+                };
+            }
 
+            // Cleanup root level booleans if they exist
+            delete result.off_topic;
+            delete result.giving_up;
+            delete result.provoking;
+            delete result.no_substance;
+            delete result.dodging;
+
+            // Log violations for debugging
+            if (result.violations.off_topic) console.log(`[Judge] VIOLATION: Off-topic detected`);
+            if (result.violations.giving_up) console.log(`[Judge] VIOLATION: Giving up detected - CONCESSION`);
+            if (result.violations.provoking) console.log(`[Judge] VIOLATION: Provoking statement detected`);
+            if (result.violations.no_substance) console.log(`[Judge] VIOLATION: No substance detected`);
+            if (result.violations.dodging) console.log(`[Judge] VIOLATION: Dodging detected`);
+
+            // Ensure warning exists if any violation is true
+            const hasViolation = Object.values(result.violations).some(v => v === true);
+            if (hasViolation && (!result.warning || result.warning.trim() === "")) {
+                result.warning = "The judge noticed some issues with your response. Please see the violations below.";
+            }
+
+            if (result.warning) console.log(`[Judge] WARNING: ${result.warning}`);
             console.log(`[Judge] Final score: ${result.persuasiveness}, Conceded: ${result.conceded}`);
 
             return result;
@@ -833,11 +859,13 @@ RETURN ONLY THE JSON. NO EXPLANATION.
                 claim_score: 50,
                 evidence_score: 50,
                 rebuttal_score: 50,
-                off_topic: false,
-                giving_up: false,
-                provoking: false,
-                no_substance: false,
-                dodging: false,
+                violations: {
+                    off_topic: false,
+                    giving_up: false,
+                    provoking: false,
+                    no_substance: false,
+                    dodging: false
+                },
                 warning: "",
                 key_point: "Analysis unavailable",
                 weakness: "Could not analyze",
