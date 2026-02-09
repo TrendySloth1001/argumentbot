@@ -1167,7 +1167,8 @@ class _DebateScreenState extends State<DebateScreen> {
                 child: TextField(
                   controller: _turnController,
                   style: const TextStyle(color: Colors.white),
-                  maxLines: null,
+                  maxLines: 5,
+                  minLines: 1,
                   decoration: InputDecoration(
                     hintText: 'Your argument...',
                     hintStyle: TextStyle(color: Colors.grey[600]),
