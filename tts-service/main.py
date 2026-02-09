@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from typing import Optional
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,7 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-VOICES_DIR = Path("/app/voices")
+VOICES_DIR = Path("/app/voices") if Path("/app/voices").exists() else Path("voices")
 DEFAULT_VOICE = "en_US-amy-medium"
 
 # Initialize Coqui TTS (Lazy loading or load on startup)
@@ -156,7 +157,7 @@ VOICE_METADATA = {
 
 class SynthesizeRequest(BaseModel):
     text: str
-    voice: str | None = None
+    voice: Optional[str] = None
     speed: float = 0.95 
     sentence_silence: float = 0.1 
 
@@ -290,7 +291,7 @@ async def synthesize(request: SynthesizeRequest):
     else:
         return await synthesize_piper(request)
 
-async def synthesize_coqui(request: SynthesizeRequest, speaker_id: str | None):
+async def synthesize_coqui(request: SynthesizeRequest, speaker_id: Optional[str]):
     try:
         # Default to first speaker if none provided
         if not speaker_id and coqui_tts.is_multi_speaker:
@@ -339,8 +340,9 @@ async def synthesize_piper(request: SynthesizeRequest):
         voice_path = available_voices[0]
     
     try:
+        piper_binary = "/app/piper_bin/piper" if Path("/app/piper_bin/piper").exists() else "./piper_bin/piper"
         cmd = [
-            "/app/piper_bin/piper", 
+            piper_binary, 
             "--model", str(voice_path), 
             "--output_raw",
             "--length_scale", str(request.speed),
@@ -414,8 +416,10 @@ async def synthesize_stream(request: SynthesizeRequest):
     
     print(f"[{time.time()}] Received synthesize_stream request for: {request.text[:20]}...", flush=True)
 
+    piper_binary = "/app/piper_bin/piper" if Path("/app/piper_bin/piper").exists() else "./piper_bin/piper"
+
     cmd = [
-        "/app/piper_bin/piper",
+        piper_binary,
         "--model", str(voice_file),
         "--output_raw",
         "--length_scale", "0.95",
@@ -425,8 +429,8 @@ async def synthesize_stream(request: SynthesizeRequest):
     ]
     
     import shutil
-    if shutil.which("piper") is None:
-        print(f"[{time.time()}] HEADER ERROR: Piper binary not found in PATH", flush=True)
+    if not Path(piper_binary).exists() and shutil.which("piper") is None:
+        print(f"[{time.time()}] HEADER ERROR: Piper binary not found", flush=True)
 
     def audio_generator():
         # ... (Same as before) ...

@@ -27,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final Map<String, String> _serverStatus = {
     'backend': 'unknown',
     'tts': 'unknown',
+    'stt': 'unknown',
     'minio': 'unknown',
   };
   bool _isCheckingStatus = false;
@@ -212,6 +213,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _serverStatus['tts'] = 'offline');
     }
 
+    // Check STT Service
+    try {
+      final sttResponse = await http
+          .get(Uri.parse(ApiConfig.sttHealthUrl))
+          .timeout(const Duration(seconds: 5));
+      if (sttResponse.statusCode == 200) {
+        final data = jsonDecode(sttResponse.body);
+        setState(
+          () => _serverStatus['stt'] = data['status'] == 'healthy'
+              ? 'online'
+              : 'error',
+        );
+      } else {
+        setState(() => _serverStatus['stt'] = 'error');
+      }
+    } catch (e) {
+      setState(() => _serverStatus['stt'] = 'offline');
+    }
+
     // Check MinIO (via backend proxy or direct)
     try {
       // MinIO console runs on port 9001, we check if responsive
@@ -259,7 +279,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Container(height: 1, color: Colors.grey[900]),
         _buildServerStatusRow('Backend API', 'backend'),
         _buildDivider(),
+        _buildDivider(),
         _buildServerStatusRow('TTS Service', 'tts'),
+        _buildDivider(),
+        _buildServerStatusRow('STT Service', 'stt'),
         _buildDivider(),
         _buildServerStatusRow('MinIO Storage', 'minio'),
         Container(height: 1, color: Colors.grey[900]),

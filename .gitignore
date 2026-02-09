@@ -19,3 +19,17 @@
 **/build/
 **/android/local.properties
 **/ios/.generated/
+
+# TTS Service (Python)
+tts-service/venv/
+tts-service/piper_bin/
+tts-service/sherpa_models/
+tts-service/voices/
+tts-service/__pycache__/
+tts-service/*.wav
+*.onnx
+*.pyc
+
+# STT Service (Python)
+stt-service/venv/
+stt-service/__pycache__/

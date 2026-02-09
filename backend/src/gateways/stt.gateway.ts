@@ -42,7 +42,7 @@ export class SttGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 // Forward to Client
                 try {
                     const message = data.toString();
-                    // console.log(`STT Transcription: ${message}`);
+                    console.log(`STT Transcription: ${message}`);
                     client.emit('transcription', message);
                 } catch (e) {
                     console.error('Error parsing/forwarding STT message', e);
@@ -81,7 +81,7 @@ export class SttGateway implements OnGatewayConnection, OnGatewayDisconnect {
     ) {
         const serviceWs = this.serviceConnections.get(client.id);
         if (serviceWs && serviceWs.readyState === WebSocket.OPEN) {
-            // console.log(`Received audio chunk type: ${typeof data}, isBuffer: ${Buffer.isBuffer(data)}, length: ${data?.length}`);
+            console.log(`Received audio chunk type: ${typeof data}, isBuffer: ${Buffer.isBuffer(data)}, length: ${data?.length}`);
             if (Buffer.isBuffer(data)) {
                 serviceWs.send(data);
             } else {
