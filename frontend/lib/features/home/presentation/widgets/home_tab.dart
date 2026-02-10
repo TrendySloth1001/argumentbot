@@ -229,23 +229,9 @@ class _HomeTabState extends State<HomeTab> {
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.blue[900]!.withOpacity(0.4),
-              Colors.purple[900]!.withOpacity(0.4),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: Colors.black,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.blueAccent.withAlpha(100)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blueAccent.withOpacity(0.2),
-              blurRadius: 10,
-              spreadRadius: 1,
-            ),
-          ],
+          border: Border.all(color: Colors.blueAccent.withAlpha(77)),
         ),
         child: Row(
           children: [
@@ -253,7 +239,7 @@ class _HomeTabState extends State<HomeTab> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: Colors.blueAccent.withAlpha(50),
+                color: Colors.blueAccent.withAlpha(26),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -278,16 +264,12 @@ class _HomeTabState extends State<HomeTab> {
                   const SizedBox(height: 4),
                   Text(
                     'Debate real humans live',
-                    style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
                   ),
                 ],
               ),
             ),
-            const Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.blueAccent,
-              size: 16,
-            ),
+            Icon(Icons.arrow_forward_ios, color: Colors.grey[600], size: 16),
           ],
         ),
       ),

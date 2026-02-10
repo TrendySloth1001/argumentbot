@@ -1,6 +1,6 @@
 class ApiConfig {
   static String _baseUrl =
-      'http://10.210.70.5:3000'; // Local Network IP (Dynamic)
+      'https://qjhcp0ph-3000.inc1.devtunnels.ms'; // Local Network IP (Dynamic)
 
   static String get baseUrl => _baseUrl;
 
