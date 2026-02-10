@@ -20,6 +20,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   bool _isSearching = false;
   String _statusText = "Ready to Debate?";
   Timer? _dotsTimer;
+  Timer? _timeoutTimer;
   User? _user;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -82,6 +83,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       sub.cancel();
     }
     _dotsTimer?.cancel();
+    _timeoutTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -99,14 +101,61 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         _user!.username, // Handle username
       );
       _startDotsAnimation();
+      _startTimeoutTimer();
       _pulseController.repeat(reverse: true);
     } else {
       _socketService.leaveQueue();
       _dotsTimer?.cancel();
+      _timeoutTimer?.cancel();
       _pulseController.stop();
       _pulseController.reset();
       setState(() => _statusText = "Ready to Debate?");
     }
+  }
+
+  void _startTimeoutTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 30), () {
+      if (!mounted || !_isSearching) return;
+      _showTimeoutDialog();
+    });
+  }
+
+  void _showTimeoutDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          "Matchmaking Timeout",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          "It's taking longer than expected to find an opponent. Do you want to keep searching?",
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _toggleSearch(); // This will cancel the search
+            },
+            child: const Text("CANCEL", style: TextStyle(color: Colors.red)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _startTimeoutTimer(); // Restart the timeout timer
+            },
+            child: const Text(
+              "KEEP SEARCHING",
+              style: TextStyle(color: Color(0xFF448AFF)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _startDotsAnimation() {

@@ -33,6 +33,7 @@ class _DebateScreenState extends State<DebateScreen> {
   Debate? _debate;
   bool _isLoading = true;
   bool _isProcessingTurn = false;
+  bool _hasError = false;
   final ScrollController _scrollController = ScrollController();
   final _turnController = TextEditingController();
 
@@ -303,6 +304,8 @@ class _DebateScreenState extends State<DebateScreen> {
           !warningAccepted) {
         _handleWarningResponse(
           warning: warning.toString(),
+          level: analysis['warning_level']?.toString() ?? 'WARNING',
+          remediation: analysis['remediation']?.toString() ?? '',
           violations:
               (analysis['violations'] as Map?)?.map(
                 (k, v) => MapEntry(k.toString(), v),
@@ -316,11 +319,18 @@ class _DebateScreenState extends State<DebateScreen> {
 
   Future<void> _handleWarningResponse({
     required String warning,
+    required String level,
+    required String remediation,
     required Map<String, dynamic> violations,
     required String content,
   }) async {
     if (mounted) {
-      final shouldRetry = await _showWarningBottomSheet(warning, violations);
+      final shouldRetry = await _showWarningBottomSheet(
+        warning,
+        level,
+        remediation,
+        violations,
+      );
 
       if (shouldRetry == true) {
         // Undo the turn
@@ -345,7 +355,10 @@ class _DebateScreenState extends State<DebateScreen> {
 
   Future<void> _nextTurn() async {
     if (_isProcessingTurn) return;
-    setState(() => _isProcessingTurn = true);
+    setState(() {
+      _isProcessingTurn = true;
+      _hasError = false;
+    });
 
     try {
       String fullContent = '';
@@ -387,6 +400,7 @@ class _DebateScreenState extends State<DebateScreen> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _hasError = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
@@ -400,6 +414,7 @@ class _DebateScreenState extends State<DebateScreen> {
     if (_turnController.text.trim().isEmpty) return;
     final content = _turnController.text.trim();
     _turnController.clear();
+    _hasError = false;
 
     // Optimistically add turn
     setState(() {
@@ -428,6 +443,8 @@ class _DebateScreenState extends State<DebateScreen> {
         // Show warning bottom sheet and handle response
         await _handleWarningResponse(
           warning: result.analysis!['warning'],
+          level: result.analysis!['warning_level'] ?? 'WARNING',
+          remediation: result.analysis!['remediation'] ?? '',
           violations: result.analysis!['violations'] ?? {},
           content: content,
         );
@@ -453,6 +470,12 @@ class _DebateScreenState extends State<DebateScreen> {
       _nextTurn();
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _hasError = true;
+          // Put text back since it failed
+          _turnController.text = content;
+          _debate!.turns.removeWhere((t) => t.id == 'user_pending');
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
@@ -994,8 +1017,25 @@ class _DebateScreenState extends State<DebateScreen> {
 
   Future<bool?> _showWarningBottomSheet(
     String message,
+    String level,
+    String remediation,
     Map<String, dynamic> violations,
   ) {
+    final bool isCritical = level.toUpperCase() == 'CRITICAL';
+    final bool isInfo = level.toUpperCase() == 'INFO';
+
+    final Color primaryColor = isCritical
+        ? Colors.red
+        : (isInfo ? neonBlue : Colors.orange);
+
+    final IconData titleIcon = isCritical
+        ? Icons.gavel_rounded
+        : (isInfo ? Icons.info_outline : Icons.warning_amber_rounded);
+
+    final String titleText = isCritical
+        ? 'CRITICAL VIOLATION'
+        : (isInfo ? 'JUDGE ASSISTANCE' : 'JUDGE WARNING');
+
     return showModalBottomSheet<bool>(
       context: context,
       isDismissible: false,
@@ -1009,7 +1049,7 @@ class _DebateScreenState extends State<DebateScreen> {
           decoration: BoxDecoration(
             color: Colors.grey[900],
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            border: Border.all(color: primaryColor.withOpacity(0.3)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1017,14 +1057,10 @@ class _DebateScreenState extends State<DebateScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.orange,
-                    size: 32,
-                  ),
+                  Icon(titleIcon, color: primaryColor, size: 32),
                   const SizedBox(width: 16),
-                  const Text(
-                    'JUDGE WARNING',
+                  Text(
+                    titleText,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -1043,6 +1079,47 @@ class _DebateScreenState extends State<DebateScreen> {
                   height: 1.5,
                 ),
               ),
+              if (remediation.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'WHAT THE JUDGE WANTS:',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: primaryColor.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.lightbulb_outline,
+                        color: primaryColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          remediation,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               const Text(
                 'VIOLATIONS DETECTED:',
@@ -1098,7 +1175,7 @@ class _DebateScreenState extends State<DebateScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       child: Text(
-                        'ACCEPT PENALTY',
+                        isCritical ? 'ACCEPT CONCESSION' : 'ACCEPT PENALTY',
                         style: TextStyle(color: Colors.grey[400]),
                       ),
                     ),
@@ -1108,8 +1185,10 @@ class _DebateScreenState extends State<DebateScreen> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context, true),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: neonGreen,
-                        foregroundColor: Colors.black,
+                        backgroundColor: primaryColor,
+                        foregroundColor: isCritical
+                            ? Colors.white
+                            : Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -1245,6 +1324,54 @@ class _DebateScreenState extends State<DebateScreen> {
               child: const Text('Details'),
             ),
           ],
+        ),
+      );
+    }
+
+    if (_hasError) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          border: Border(top: BorderSide(color: Colors.grey[900]!)),
+        ),
+        child: GestureDetector(
+          onTap: _isProcessingTurn
+              ? null
+              : () {
+                  if (_debate!.mode == 'USER_VS_AI') {
+                    if (_isUserTurn) {
+                      _submitUserTurn();
+                    } else {
+                      _nextTurn();
+                    }
+                  } else {
+                    _nextTurn();
+                  }
+                },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.refresh, color: Colors.orange, size: 22),
+                SizedBox(width: 8),
+                Text(
+                  'RETRY FAILED TURN',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }

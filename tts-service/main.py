@@ -340,7 +340,7 @@ async def synthesize_piper(request: SynthesizeRequest):
         voice_path = available_voices[0]
     
     try:
-        piper_binary = "/app/piper_bin/piper" if Path("/app/piper_bin/piper").exists() else "./piper_bin/piper"
+        piper_binary = shutil.which("piper") or ("/app/piper_bin/piper" if Path("/app/piper_bin/piper").exists() else "./piper_bin/piper")
         cmd = [
             piper_binary, 
             "--model", str(voice_path), 
@@ -416,7 +416,7 @@ async def synthesize_stream(request: SynthesizeRequest):
     
     print(f"[{time.time()}] Received synthesize_stream request for: {request.text[:20]}...", flush=True)
 
-    piper_binary = "/app/piper_bin/piper" if Path("/app/piper_bin/piper").exists() else "./piper_bin/piper"
+    piper_binary = shutil.which("piper") or ("/app/piper_bin/piper" if Path("/app/piper_bin/piper").exists() else "./piper_bin/piper")
 
     cmd = [
         piper_binary,

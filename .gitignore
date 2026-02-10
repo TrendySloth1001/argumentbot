@@ -22,6 +22,7 @@
 
 # TTS Service (Python)
 tts-service/venv/
+tts-service/venv311/
 tts-service/piper_bin/
 tts-service/sherpa_models/
 tts-service/voices/

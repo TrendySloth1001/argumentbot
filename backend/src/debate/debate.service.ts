@@ -845,6 +845,8 @@ If ANY giving_up signal: conceded = true, debate ends
         "dodging": <boolean>
     },
     "warning": "<string, describe the violation if any, otherwise empty string>",
+    "warning_level": "<string: INFO | WARNING | CRITICAL, based on severity>",
+    "remediation": "<string, specific advice on how to improve the argument to fix the violation>",
     "key_point": "<one sentence summary of their argument, or 'No valid argument'>",
     "weakness": "<biggest flaw in their response>",
     "conceded": <boolean, true if violations.giving_up detected>
@@ -891,10 +893,21 @@ RETURN ONLY THE JSON. NO EXPLANATION.
             if (result.violations.no_substance) console.log(`[Judge] VIOLATION: No substance detected`);
             if (result.violations.dodging) console.log(`[Judge] VIOLATION: Dodging detected`);
 
-            // Ensure warning exists if any violation is true
+            // Ensure warning and level exists if any violation is true
             const hasViolation = Object.values(result.violations).some(v => v === true);
-            if (hasViolation && (!result.warning || result.warning.trim() === "")) {
-                result.warning = "The judge noticed some issues with your response. Please see the violations below.";
+            if (hasViolation) {
+                if (!result.warning || result.warning.trim() === "") {
+                    result.warning = "The judge noticed some issues with your response.";
+                }
+                if (!result.warning_level) {
+                    result.warning_level = result.violations.provoking ? "CRITICAL" : "WARNING";
+                }
+                if (!result.remediation) {
+                    result.remediation = "Try to address the topic more directly and avoid personal attacks or vague statements.";
+                }
+            } else {
+                result.warning_level = result.warning_level || "INFO";
+                result.remediation = result.remediation || "";
             }
 
             if (result.warning) console.log(`[Judge] WARNING: ${result.warning}`);
