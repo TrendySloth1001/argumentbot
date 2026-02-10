@@ -299,9 +299,12 @@ class _DebateScreenState extends State<DebateScreen> {
       final warning = analysis['warning'];
       final warningAccepted = analysis['warningAccepted'] == true;
 
-      if (warning != null &&
-          warning.toString().isNotEmpty &&
-          !warningAccepted) {
+      final canContinue = analysis['can_continue'] != false; // Default true
+
+      if ((warning != null &&
+              warning.toString().isNotEmpty &&
+              !warningAccepted) ||
+          !canContinue) {
         _handleWarningResponse(
           warning: warning.toString(),
           level: analysis['warning_level']?.toString() ?? 'WARNING',
@@ -343,12 +346,10 @@ class _DebateScreenState extends State<DebateScreen> {
           _scrollToBottom();
         }
       } else if (shouldRetry == false) {
-        // Accept penalty - proceed to AI turn
+        // Accept penalty - proceed to AI turn (Verdict Turn)
         await _debateService.acknowledgeWarning(widget.debateId);
-        await _loadDebate(); // Refresh state to see if penalty finished the game
-        if (_debate?.status != 'FINISHED') {
-          _nextTurn();
-        }
+        await _loadDebate();
+        _nextTurn();
       }
     }
   }
@@ -437,12 +438,17 @@ class _DebateScreenState extends State<DebateScreen> {
         content,
       );
 
-      if (result.analysis != null &&
-          result.analysis!['warning'] != null &&
-          (result.analysis!['warning'] as String).isNotEmpty) {
+      final canContinue = result.analysis?['can_continue'] != false;
+
+      if ((result.analysis != null &&
+              result.analysis!['warning'] != null &&
+              (result.analysis!['warning'] as String).isNotEmpty) ||
+          !canContinue) {
         // Show warning bottom sheet and handle response
         await _handleWarningResponse(
-          warning: result.analysis!['warning'],
+          warning:
+              result.analysis!['warning'] ??
+              'The judge has detected a violation.',
           level: result.analysis!['warning_level'] ?? 'WARNING',
           remediation: result.analysis!['remediation'] ?? '',
           violations: result.analysis!['violations'] ?? {},

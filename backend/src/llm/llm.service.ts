@@ -16,6 +16,8 @@ export class LlmService {
                     model: model, // llama3.2 (Fast) or llama3 (Smart)
                     messages: [{ role: 'user', content }],
                     stream: false,
+                }, {
+                    timeout: 120000, // 120 seconds for slow LLM analysis
                 }),
             );
 
@@ -46,6 +48,8 @@ export class LlmService {
                         num_ctx: 8192, // Increase context window
                         temperature: 0.7,
                     },
+                }, {
+                    timeout: 120000,
                 }),
             );
 

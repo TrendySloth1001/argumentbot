@@ -172,11 +172,12 @@ export class DebateService {
         });
 
         if (!debate) throw new NotFoundException('Debate not found');
-        if (debate.status === DebateStatus.FINISHED) {
+        const lastTurn = debate.turns[debate.turns.length - 1];
+        const lastTurnPenaltyAccepted = lastTurn.speaker === Speaker.USER && lastTurn.analysis && (lastTurn.analysis as any).warningAccepted === true;
+
+        if (debate.status === DebateStatus.FINISHED && !lastTurnPenaltyAccepted) {
             return { finished: true };
         }
-
-        const lastTurn = debate.turns[debate.turns.length - 1];
         let nextSpeaker: Speaker;
 
         if (debate.mode === DebateMode.USER_VS_AI) {
@@ -192,11 +193,14 @@ export class DebateService {
             nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
         }
 
-        // GUARD: If last turn has an unacknowledged warning, block AI response
+        // GUARD: If last turn has an unacknowledged warning OR cannot continue, block AI response
         if (lastTurn.speaker === Speaker.USER && lastTurn.analysis) {
             const analysis = lastTurn.analysis as any;
-            if (analysis.warning && analysis.warning.length > 0 && !analysis.warningAccepted) {
-                console.log(`[Debate] Blocked AI turn: Pending unacknowledged warning for debate ${debateId}`);
+            const hasPendingWarning = analysis.warning && analysis.warning.length > 0 && !analysis.warningAccepted;
+            const cannotContinue = analysis.can_continue === false;
+
+            if (hasPendingWarning || cannotContinue) {
+                console.log(`[Debate] Blocked AI turn: ${cannotContinue ? 'Cannot continue' : 'Pending warning'} for debate ${debateId}`);
                 throw new Error('PENDING_WARNING');
             }
         }
@@ -216,19 +220,37 @@ export class DebateService {
             opponentDescription = 'THE USER (A REAL HUMAN)';
         }
 
-        const lastTurnConceded = lastTurn.analysis && (lastTurn.analysis as any).conceded === true;
+        const lastTurnConceded = (lastTurn.analysis && (lastTurn.analysis as any).conceded === true) || (lastTurnPenaltyAccepted && debate.status === DebateStatus.FINISHED);
 
         let prompt = '';
         if (lastTurnConceded) {
+            const winnerLabel = debate.winner === (debate.userRole === DebateRole.PRO ? 'CON' : 'PRO') ? 'YOU ARE THE WINNER' : 'THE OPPONENT WON';
             prompt = `
 You are the ${roleDescription} in a COMPETITIVE debate.
-Your opponent (${opponentDescription}) has CONCEDED!
+The judge has declared a verdict! ${winnerLabel}.
+${lastTurnPenaltyAccepted ? 'The opponent accepted a penalty which resulted in their defeat.' : 'Your opponent has conceded!'}
 
 Victory is yours.
-Give a short, witty, and slightly gloating victory speech.
+Give a short, witty, and slightly gloating victory speech and FINAL VERDICT.
 Be gracious but remind them why you won.
 UNDER 50 WORDS.
 NO META-COMMENTARY.
+`;
+        } else if (lastTurnPenaltyAccepted) {
+            prompt = `
+You are the ${roleDescription} in a COMPETITIVE debate.
+The judge just penalised your opponent (${opponentDescription}) for a rule violation!
+They have accepted the penalty and the debate continues.
+
+Topic: "${debate.topic}"
+
+=== DEBATE HISTORY ===
+${history}
+
+=== YOUR MISSION ===
+1. START by acknowledging the judge's penalty against your opponent with a witty remark.
+2. CONTINUED with your counter-argument against their original (penalised) claim.
+3. UNDER 100 WORDS TOTAL.
 `;
         } else {
             prompt = `
@@ -332,8 +354,9 @@ ${contextText}
 
         // Check for Game Over conditions
         const aiConceded = (analysis as any).conceded === true;
+        const canContinue = (analysis as any).can_continue !== false;
 
-        if (aiConceded || lastTurnConceded) {
+        if ((aiConceded || lastTurnConceded) && canContinue) {
             await this.prisma.debate.update({
                 where: { id: debateId },
                 data: { status: DebateStatus.FINISHED }
@@ -383,21 +406,6 @@ ${contextText}
             data: { analysis }
         });
 
-        // Debug: Log analysis result
-        console.log(`[Debate] User turn analysis for ${debateId}:`, JSON.stringify(analysis, null, 2));
-
-        // Check if user conceded
-        const userConceded = (analysis as any).conceded === true;
-        console.log(`[Debate] User conceded check: ${userConceded} (raw value: ${(analysis as any).conceded})`);
-
-        if (userConceded) {
-            console.log(`[Debate] User conceded in debate ${debateId} - marking as FINISHED`);
-            await this.prisma.debate.update({
-                where: { id: debateId },
-                data: { status: DebateStatus.FINISHED }
-            });
-        }
-
         // Check for auto-win by score dominance - ONLY if no warning is pending
         const updatedDebate = await this.prisma.debate.findUnique({
             where: { id: debateId },
@@ -405,14 +413,27 @@ ${contextText}
         });
 
         const hasWarning = (analysis as any).warning && (analysis as any).warning.length > 0;
+        const canContinue = (analysis as any).can_continue !== false;
+
+        // Check if user conceded
+        const userConceded = (analysis as any).conceded === true;
+
+        if (userConceded && canContinue) {
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.FINISHED }
+            });
+        }
+
         let winner: string | null = null;
-        if (updatedDebate && !hasWarning) {
+        if (updatedDebate && !hasWarning && canContinue) {
             winner = await this.checkForWinner(debateId, updatedDebate.turns);
         }
 
         await this.cacheManager.del(`debate:${debateId}`);
 
-        return { turn: newTurn, analysis, finished: userConceded || (winner !== null && !hasWarning), winner };
+        const isFinished = (userConceded || winner !== null) && canContinue;
+        return { turn: newTurn, analysis, finished: isFinished, winner };
     }
 
     async acknowledgeWarning(debateId: string) {
@@ -429,6 +450,14 @@ ${contextText}
                 where: { id: lastTurn.id },
                 data: { analysis }
             });
+
+            // If the analysis showed concession, finish the debate now that it's accepted
+            if (analysis.conceded === true) {
+                await this.prisma.debate.update({
+                    where: { id: debateId },
+                    data: { status: DebateStatus.FINISHED }
+                });
+            }
 
             // NOW check for winner since the penalty is finalized
             const updatedTurns = await this.prisma.debateTurn.findMany({
@@ -452,6 +481,13 @@ ${contextText}
             await this.prisma.debateTurn.delete({
                 where: { id: lastTurn.id }
             });
+
+            // Ensure debate is ACTIVE if it was finished
+            await this.prisma.debate.update({
+                where: { id: debateId },
+                data: { status: DebateStatus.ACTIVE }
+            });
+
             await this.cacheManager.del(`debate:${debateId}`);
             await this.cacheManager.del('debates:all');
             return { success: true };
@@ -751,9 +787,10 @@ GO! Demolish their argument!
             data: { analysis }
         });
 
-        // Check Win Condition
         const conceded = (analysis as any).conceded === true;
-        if (conceded) {
+        const canContinue = (analysis as any).can_continue !== false;
+
+        if (conceded && canContinue) {
             await this.prisma.debate.update({
                 where: { id: debateId },
                 data: { status: DebateStatus.FINISHED }
@@ -765,7 +802,7 @@ GO! Demolish their argument!
         return {
             turn: newTurn,
             analysis,
-            finished: conceded
+            finished: (conceded && canContinue)
         };
     }
 
@@ -824,19 +861,14 @@ Response to judge: "${response}"
 - evidence_score: Did they provide facts/examples? (0 if none)
 - rebuttal_score: Did they counter opponent's points? (0 if ignored)
 
-=== FINAL SCORE CALCULATION ===
-base_score = (claim_score + evidence_score + rebuttal_score) / 3
-penalties = off_topic_penalty + provoking_penalty + no_substance_penalty + dodging_penalty
 final_persuasiveness = max(0, base_score + penalties)
-
-If ANY giving_up signal: conceded = true, debate ends
 
 === REQUIRED OUTPUT (STRICT JSON) ===
 {
     "persuasiveness": <number 0-100, can be 0 or negative after penalties>,
-    "claim_score": <number 0-100>,
-    "evidence_score": <number 0-100>,
-    "rebuttal_score": <number 0-100>,
+    "claim_score": <number 0-100, REQUIRED>,
+    "evidence_score": <number 0-100, REQUIRED>,
+    "rebuttal_score": <number 0-100, REQUIRED>,
     "violations": {
         "off_topic": <boolean>,
         "giving_up": <boolean>,
@@ -848,8 +880,7 @@ If ANY giving_up signal: conceded = true, debate ends
     "warning_level": "<string: INFO | WARNING | CRITICAL, based on severity>",
     "remediation": "<string, specific advice on how to improve the argument to fix the violation>",
     "key_point": "<one sentence summary of their argument, or 'No valid argument'>",
-    "weakness": "<biggest flaw in their response>",
-    "conceded": <boolean, true if violations.giving_up detected>
+    "weakness": "<biggest flaw in their response>"
 }
 
 RETURN ONLY THE JSON. NO EXPLANATION.
@@ -866,7 +897,12 @@ RETURN ONLY THE JSON. NO EXPLANATION.
                 throw new Error('No JSON found');
             }
 
-            const result = JSON.parse(jsonMatch[0]);
+            // Normalize booleans (some models return TRUE/FALSE in caps)
+            let sanitizedJson = jsonMatch[0]
+                .replace(/:\s*TRUE\b/gi, ': true')
+                .replace(/:\s*FALSE\b/gi, ': false');
+
+            const result = JSON.parse(sanitizedJson);
 
             // Ensure violations object exists
             if (!result.violations) {
@@ -911,7 +947,12 @@ RETURN ONLY THE JSON. NO EXPLANATION.
             }
 
             if (result.warning) console.log(`[Judge] WARNING: ${result.warning}`);
-            console.log(`[Judge] Final score: ${result.persuasiveness}, Conceded: ${result.conceded}`);
+
+            // Programmatically derive flags
+            result.can_continue = !hasViolation;
+            result.conceded = !!result.violations?.giving_up;
+
+            console.log(`[Judge] Final score: ${result.persuasiveness}, Conceded: ${result.conceded}, Can Continue: ${result.can_continue}`);
 
             return result;
         } catch (e) {
@@ -928,10 +969,13 @@ RETURN ONLY THE JSON. NO EXPLANATION.
                     no_substance: false,
                     dodging: false
                 },
-                warning: "",
+                warning: "Judge interrupted: Analysis could not be completed correctly. Please retry your turn.",
+                warning_level: "WARNING",
+                remediation: "This usually happens if the AI output was malformed. Try submitting your argument again.",
                 key_point: "Analysis unavailable",
                 weakness: "Could not analyze",
-                conceded: false
+                conceded: false,
+                can_continue: false // Hard block on failure
             };
         }
     }
