@@ -34,6 +34,11 @@ export class DebateController {
         return this.debateService.undoLastTurn(id);
     }
 
+    @Post(':id/acknowledge-warning')
+    async acknowledgeWarning(@Param('id') id: string) {
+        return this.debateService.acknowledgeWarning(id);
+    }
+
     @Get(':id/stream')
     async streamTurn(@Param('id') id: string, @Query('scoringMode') scoringMode: 'AI' | 'ALGO' = 'AI', @Res() res: Response) {
         const { stream, debateId, speaker, topic, lastTurnContent, modelName, lastTurnConceded } = await this.debateService.processTurnStream(id, scoringMode);

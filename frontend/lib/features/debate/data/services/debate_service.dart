@@ -198,4 +198,20 @@ class DebateService {
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
+
+  Future<Map<String, dynamic>> acknowledgeWarning(String debateId) async {
+    final token = await _storage.read(key: 'jwt_token');
+    final response = await http.post(
+      Uri.parse('$baseUrl/debate/$debateId/acknowledge-warning'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to acknowledge warning: ${response.statusCode}');
+    }
+  }
 }

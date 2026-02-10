@@ -192,6 +192,15 @@ export class DebateService {
             nextSpeaker = lastTurn.speaker === Speaker.MODEL_A ? Speaker.MODEL_B : Speaker.MODEL_A;
         }
 
+        // GUARD: If last turn has an unacknowledged warning, block AI response
+        if (lastTurn.speaker === Speaker.USER && lastTurn.analysis) {
+            const analysis = lastTurn.analysis as any;
+            if (analysis.warning && analysis.warning.length > 0 && !analysis.warningAccepted) {
+                console.log(`[Debate] Blocked AI turn: Pending unacknowledged warning for debate ${debateId}`);
+                throw new Error('PENDING_WARNING');
+            }
+        }
+
         const roleDescription = nextSpeaker === Speaker.MODEL_A ? 'PROPONENT (defending the claim)' : 'OPPONENT (attacking the claim)';
         const activeModel = nextSpeaker === Speaker.MODEL_A ? 'llama3.2' : 'gemma2:2b';
 
@@ -389,19 +398,49 @@ ${contextText}
             });
         }
 
-        // Check for auto-win by score dominance
+        // Check for auto-win by score dominance - ONLY if no warning is pending
         const updatedDebate = await this.prisma.debate.findUnique({
             where: { id: debateId },
             include: { turns: true }
         });
+
+        const hasWarning = (analysis as any).warning && (analysis as any).warning.length > 0;
         let winner: string | null = null;
-        if (updatedDebate) {
+        if (updatedDebate && !hasWarning) {
             winner = await this.checkForWinner(debateId, updatedDebate.turns);
         }
 
         await this.cacheManager.del(`debate:${debateId}`);
 
-        return { turn: newTurn, analysis, finished: userConceded || winner !== null, winner };
+        return { turn: newTurn, analysis, finished: userConceded || (winner !== null && !hasWarning), winner };
+    }
+
+    async acknowledgeWarning(debateId: string) {
+        const lastTurn = await this.prisma.debateTurn.findFirst({
+            where: { debateId },
+            orderBy: { timestamp: 'desc' }
+        });
+
+        if (lastTurn && lastTurn.speaker === Speaker.USER && lastTurn.analysis) {
+            const analysis = lastTurn.analysis as any;
+            analysis.warningAccepted = true;
+
+            await this.prisma.debateTurn.update({
+                where: { id: lastTurn.id },
+                data: { analysis }
+            });
+
+            // NOW check for winner since the penalty is finalized
+            const updatedTurns = await this.prisma.debateTurn.findMany({
+                where: { debateId },
+                orderBy: { timestamp: 'asc' }
+            });
+            const winner = await this.checkForWinner(debateId, updatedTurns);
+
+            await this.cacheManager.del(`debate:${debateId}`);
+            return { success: true, finished: winner !== null, winner };
+        }
+        return { success: false, message: 'No pending warning found' };
     }
     async undoLastTurn(debateId: string) {
         const lastTurn = await this.prisma.debateTurn.findFirst({
@@ -508,6 +547,16 @@ NO EXPLANATION OR META-COMMENTARY. JUST THE RESPONSE.
         }
 
         const lastTurn = debate.turns[debate.turns.length - 1];
+
+        // GUARD: If last turn has an unacknowledged warning, block AI response
+        if (lastTurn.speaker === Speaker.USER && lastTurn.analysis) {
+            const analysis = lastTurn.analysis as any;
+            if (analysis.warning && analysis.warning.length > 0 && !analysis.warningAccepted) {
+                console.log(`[Debate] Blocked AI turn: Pending unacknowledged warning for debate ${debateId}`);
+                throw new Error('PENDING_WARNING');
+            }
+        }
+
         let nextSpeaker: Speaker;
 
         if (debate.mode === DebateMode.USER_VS_AI) {

@@ -273,13 +273,73 @@ class _DebateScreenState extends State<DebateScreen> {
   Future<void> _loadDebate() async {
     try {
       final debate = await _debateService.getDebate(widget.debateId);
-      setState(() {
-        _debate = debate;
-        _isLoading = false;
-      });
-      _scrollToBottom();
+      if (mounted) {
+        setState(() {
+          _debate = debate;
+          _isLoading = false;
+        });
+        _scrollToBottom();
+        _checkPendingWarning();
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _checkPendingWarning() {
+    if (_debate == null || _debate!.status == 'FINISHED' || _isProcessingTurn) {
+      return;
+    }
+    if (_debate!.turns.isEmpty || _debate!.mode != 'USER_VS_AI') return;
+
+    final lastTurn = _debate!.turns.last;
+    if (lastTurn.speaker == 'USER' && lastTurn.analysis != null) {
+      final analysis = lastTurn.analysis as Map<String, dynamic>;
+      final warning = analysis['warning'];
+      final warningAccepted = analysis['warningAccepted'] == true;
+
+      if (warning != null &&
+          warning.toString().isNotEmpty &&
+          !warningAccepted) {
+        _handleWarningResponse(
+          warning: warning.toString(),
+          violations:
+              (analysis['violations'] as Map?)?.map(
+                (k, v) => MapEntry(k.toString(), v),
+              ) ??
+              {},
+          content: lastTurn.content,
+        );
+      }
+    }
+  }
+
+  Future<void> _handleWarningResponse({
+    required String warning,
+    required Map<String, dynamic> violations,
+    required String content,
+  }) async {
+    if (mounted) {
+      final shouldRetry = await _showWarningBottomSheet(warning, violations);
+
+      if (shouldRetry == true) {
+        // Undo the turn
+        final success = await _debateService.undoLastTurn(widget.debateId);
+        if (success && mounted) {
+          setState(() {
+            _debate!.turns.removeLast();
+            _turnController.text = content; // Put text back for editing
+          });
+          _scrollToBottom();
+        }
+      } else if (shouldRetry == false) {
+        // Accept penalty - proceed to AI turn
+        await _debateService.acknowledgeWarning(widget.debateId);
+        await _loadDebate(); // Refresh state to see if penalty finished the game
+        if (_debate?.status != 'FINISHED') {
+          _nextTurn();
+        }
+      }
     }
   }
 
@@ -365,26 +425,13 @@ class _DebateScreenState extends State<DebateScreen> {
       if (result.analysis != null &&
           result.analysis!['warning'] != null &&
           (result.analysis!['warning'] as String).isNotEmpty) {
-        // Show warning dialog
-        if (mounted) {
-          final shouldRetry = await _showWarningDialog(
-            result.analysis!['warning'],
-            result.analysis!['violations'] ?? {},
-          );
-
-          if (shouldRetry == true) {
-            // Undo the turn
-            final success = await _debateService.undoLastTurn(widget.debateId);
-            if (success && mounted) {
-              setState(() {
-                _debate!.turns.removeLast();
-                _turnController.text = content; // Put text back for editing
-              });
-              _scrollToBottom();
-              return;
-            }
-          }
-        }
+        // Show warning bottom sheet and handle response
+        await _handleWarningResponse(
+          warning: result.analysis!['warning'],
+          violations: result.analysis!['violations'] ?? {},
+          content: content,
+        );
+        return;
       }
 
       if (result.finished) {
@@ -945,96 +992,143 @@ class _DebateScreenState extends State<DebateScreen> {
     );
   }
 
-  Future<bool?> _showWarningDialog(
+  Future<bool?> _showWarningBottomSheet(
     String message,
     Map<String, dynamic> violations,
   ) {
-    return showDialog<bool>(
+    return showModalBottomSheet<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-            SizedBox(width: 12),
-            Text(
-              'JUDGE WARNING',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'VIOLATIONS DETECTED:',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...violations.entries
-                .where((e) => e.value == true)
-                .map(
-                  (e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.circle, color: Colors.red, size: 6),
-                        const SizedBox(width: 8),
-                        Text(
-                          e.key.replaceAll('_', ' '),
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 16),
+                  const Text(
+                    'JUDGE WARNING',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
                     ),
                   ),
-                ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'ACCEPT PENALTY',
-              style: TextStyle(color: Colors.grey[400]),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: neonGreen,
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                ],
               ),
-            ),
-            child: const Text(
-              'RETRY TURN',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+              const SizedBox(height: 24),
+              Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'VIOLATIONS DETECTED:',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...violations.entries
+                  .where((e) => e.value == true)
+                  .map(
+                    (e) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.redAccent,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            e.key.replaceAll('_', ' ').toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: Text(
+                        'ACCEPT PENALTY',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: neonGreen,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'RETRY TURN',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              // Extra space for bottom safe area
+              SizedBox(height: MediaQuery.of(context).padding.bottom),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
